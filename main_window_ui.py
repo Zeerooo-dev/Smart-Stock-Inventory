@@ -51,7 +51,7 @@ BASE_STYLE = f"""
         border-bottom: 1px solid {COLOR['outline_variant']};
     }}
     #appTitle {{
-        font-size: 18px;
+        font-size: 14px;
         font-weight: 700;
         color: {COLOR['primary']};
     }}
@@ -325,10 +325,6 @@ BASE_STYLE = f"""
     }}
 
     /* ── Theme-aware regions (no per-widget light-theme lock-in) ─── */
-    QFrame#settingsSidebar {{
-        background-color: {COLOR['surface_container_low']};
-        border-right: 1px solid {COLOR['outline_variant']};
-    }}
     QFrame#inventoryActionBar {{
         background-color: {COLOR['surface_container_low']};
         border-top: 1px solid {COLOR['outline_variant']};
@@ -392,28 +388,6 @@ BASE_STYLE = f"""
         font-weight: 700;
         color: {COLOR['on_surface']};
     }}
-    QLabel#wsBadgeIcon {{
-        background-color: {COLOR['secondary_container']};
-        color: {COLOR['on_surface']};
-        border-radius: 19px;
-        font-weight: 700;
-        font-size: 15px;
-    }}
-    QLabel#wsBadgeTitle {{
-        font-weight: 700;
-        font-size: 14px;
-        color: {COLOR['on_surface']};
-        background: transparent;
-    }}
-    QLabel#wsBadgeSubtitle {{
-        font-size: 12px;
-        color: {COLOR['on_surface_variant']};
-        background: transparent;
-    }}
-    QFrame#wsBadgeRow {{
-        background: transparent;
-        border: none;
-    }}
     QLineEdit#readonlyDbPath {{
         background-color: {COLOR['surface_container_low']};
         color: {COLOR['on_surface']};
@@ -469,8 +443,11 @@ class Ui_MainWindow:
         nav_layout.setContentsMargins(28, 0, 28, 0)
         nav_layout.setSpacing(0)
 
-        self.appTitle = QtWidgets.QLabel("SmartStock Inventory System")
+        self.appTitle = QtWidgets.QLabel("SmartStock")
         self.appTitle.setObjectName("appTitle")
+        self.appTitle.setFixedHeight(self.topNavBar.height())
+        self.appTitle.setAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft)
+        self.appTitle.setToolTip("SmartStock Inventory System")
 
         nav_layout.addWidget(self.appTitle)
         nav_layout.addSpacing(32)
@@ -928,40 +905,7 @@ class Ui_MainWindow:
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # ── Left sidebar ──────────────────────────────────────────────
-        sidebar = QtWidgets.QFrame()
-        sidebar.setObjectName("settingsSidebar")
-        sidebar.setFixedWidth(220)
-        sb_layout = QtWidgets.QVBoxLayout(sidebar)
-        sb_layout.setContentsMargins(12, 16, 12, 16)
-        sb_layout.setSpacing(4)
-
-        # Workspace badge
-        ws_frame = QtWidgets.QFrame()
-        ws_frame.setObjectName("wsBadgeRow")
-        ws_row = QtWidgets.QHBoxLayout(ws_frame)
-        ws_row.setSpacing(10)
-        ws_icon = QtWidgets.QLabel("W")
-        ws_icon.setFixedSize(38, 38)
-        ws_icon.setAlignment(QtCore.Qt.AlignCenter)
-        ws_icon.setObjectName("wsBadgeIcon")
-        ws_text_col = QtWidgets.QVBoxLayout()
-        ws_title = QtWidgets.QLabel("Inventory Ops")
-        ws_title.setObjectName("wsBadgeTitle")
-        ws_sub = QtWidgets.QLabel("Warehouse A-12")
-        ws_sub.setObjectName("wsBadgeSubtitle")
-        ws_text_col.addWidget(ws_title)
-        ws_text_col.addWidget(ws_sub)
-        ws_row.addWidget(ws_icon)
-        ws_row.addLayout(ws_text_col)
-        sb_layout.addWidget(ws_frame)
-        sb_layout.addSpacing(12)
-
-        sb_layout.addStretch()
-
-        outer.addWidget(sidebar)
-
-        # ── Main settings content ──────────────────────────────────────
+        # ── Main settings content (now fills the full page width) ──────
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
@@ -985,14 +929,19 @@ class Ui_MainWindow:
         gb1_layout = QtWidgets.QVBoxLayout(self.groupBox)
         gb1_layout.setSpacing(10)
 
-        db_path_lbl = QtWidgets.QLabel("Read-only Database Path")
-        db_path_lbl.setObjectName("inputLabel")
+        path_note = QtWidgets.QLabel(
+            "Your inventory data is stored locally"
+            
+        )
+        path_note.setObjectName("mutedNote")
+        path_note.setWordWrap(True)
+
+        # Hidden field — kept so existing code that sets the db path
+        # (e.g. app.py) still works, but it's never shown to the user.
         self.txt_db_path = QtWidgets.QLineEdit()
         self.txt_db_path.setObjectName("readonlyDbPath")
         self.txt_db_path.setReadOnly(True)
-        path_note = QtWidgets.QLabel("System-managed path. Contact infrastructure team for migration requests.")
-        path_note.setObjectName("mutedNote")
-        path_note.setWordWrap(True)
+        self.txt_db_path.setVisible(False)
 
         backup_row = QtWidgets.QHBoxLayout()
         backup_row.addStretch()
@@ -1001,8 +950,6 @@ class Ui_MainWindow:
         self.btn_backup.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         backup_row.addWidget(self.btn_backup)
 
-        gb1_layout.addWidget(db_path_lbl)
-        gb1_layout.addWidget(self.txt_db_path)
         gb1_layout.addWidget(path_note)
         gb1_layout.addLayout(backup_row)
         content_layout.addWidget(self.groupBox)
@@ -1453,6 +1400,12 @@ class Ui_MainWindow:
         )
         self.tableSuppliers.horizontalHeader().setSectionResizeMode(
             2, QtWidgets.QHeaderView.Stretch
+        )
+        self.tableSuppliers.horizontalHeader().setSectionResizeMode(
+            3, QtWidgets.QHeaderView.Stretch
+        )
+        self.tableSuppliers.horizontalHeader().setSectionResizeMode(
+            4, QtWidgets.QHeaderView.Stretch
         )
         self.tableSuppliers.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.tableSuppliers.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)

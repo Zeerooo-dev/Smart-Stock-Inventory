@@ -9,6 +9,62 @@ import shutil
 import uuid
 from datetime import datetime
 
+from cryptography.fernet import Fernet
+import base64
+import hashlib
+
+DB_ENCRYPTION_PASSPHRASE = "dragging_ignition_shudder_borax_recolor_habitable"
+
+
+def _derive_fernet_key(passphrase: str) -> bytes:
+    """Turns any passphrase into a 32-byte urlsafe base64 key Fernet requires."""
+    digest = hashlib.sha256(passphrase.encode("utf-8")).digest()
+    return base64.urlsafe_b64encode(digest)
+
+
+_FERNET = Fernet(_derive_fernet_key(DB_ENCRYPTION_PASSPHRASE))
+
+
+def get_appdata_db_path(filename="smartstock.db"):
+    """Returns a per-user, OS-correct AppData path for the database file."""
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+        folder = os.path.join(base, "SmartStock")
+    elif sys.platform == "darwin":
+        folder = os.path.expanduser("~/Library/Application Support/SmartStock")
+    else:
+        base = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+        folder = os.path.join(base, "SmartStock")
+    os.makedirs(folder, exist_ok=True)
+    return os.path.join(folder, filename)
+
+
+def decrypt_db_if_needed(db_path):
+    """If an encrypted .db.enc exists, decrypt it to a plaintext .db for use."""
+    enc_path = db_path + ".enc"
+    if os.path.exists(enc_path):
+        with open(enc_path, "rb") as f:
+            encrypted = f.read()
+        decrypted = _FERNET.decrypt(encrypted)
+        with open(db_path, "wb") as f:
+            f.write(decrypted)
+
+
+def encrypt_db_and_cleanup(db_path):
+    """Encrypts the plaintext .db into .db.enc, then deletes the plaintext."""
+    if not os.path.exists(db_path):
+        return
+    with open(db_path, "rb") as f:
+        plaintext = f.read()
+    encrypted = _FERNET.encrypt(plaintext)
+    enc_path = db_path + ".enc"
+    with open(enc_path, "wb") as f:
+        f.write(encrypted)
+    try:
+        os.remove(db_path)
+    except OSError:
+        pass
+
 from main_window_ui import (
     Ui_MainWindow, BASE_STYLE, COLOR,
     ItemHistoryDialog, _populate_ledger_table,
@@ -493,13 +549,17 @@ class SmartStockApp(QtWidgets.QMainWindow, Ui_MainWindow):
         self.setupUi(self)
 
         if is_sandbox:
-            self.db_name = "smartstock_sandbox.db"
+            self.db_name = get_appdata_db_path("smartstock_sandbox.db")
             self.setWindowTitle(
                 "SmartStock Inventory System (SANDBOX / DEVELOPMENT ENVIRONMENT)"
             )
         else:
-            self.db_name = "smartstock.db"
+            self.db_name = get_appdata_db_path("smartstock.db")
             self.setWindowTitle("SmartStock Inventory System")
+
+        # Decrypt the .db.enc (if it exists from a previous session) into a
+        # working plaintext .db before any queries run.
+        decrypt_db_if_needed(self.db_name)
 
         self._current_page = 0
         self._records_per_page = 50
@@ -507,6 +567,9 @@ class SmartStockApp(QtWidgets.QMainWindow, Ui_MainWindow):
         self._total_records = 0
         self._analytics_canvas = None
         self._current_theme = "Default"
+        # Remembers whether the window was maximized or normal before F11
+        # was pressed, so Esc/F11 can restore the exact prior state.
+        self._was_maximized_before_fullscreen = False
         # Audit log pagination / filter state
         self._audit_page = 0
         self._audit_total = 0
@@ -1690,6 +1753,7 @@ class SmartStockApp(QtWidgets.QMainWindow, Ui_MainWindow):
         _sc("Ctrl+S", lambda: (self._go_dashboard(), self.search_input.setFocus()))
         _sc("Ctrl+R", self._shortcut_refresh)
         _sc("Ctrl+E", self.export_to_csv)
+        _sc("F11",    self.toggle_fullscreen)
 
         # Contextual row actions — scoped to the inventory table widget only
         open_sc  = QtWidgets.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Return), self.tableInventory)
@@ -1725,8 +1789,32 @@ class SmartStockApp(QtWidgets.QMainWindow, Ui_MainWindow):
     _SCAN_WINDOW_MS   = 80   # max ms between consecutive scan keystrokes
     _SCAN_MIN_LEN     = 6    # minimum character length to qualify as a scan
 
+    def toggle_fullscreen(self):
+        """Toggles true OS-level fullscreen (Qt.WindowFullScreen), not just
+        a maximized window — this hides the title bar and taskbar/dock too."""
+        if self.isFullScreen():
+            if self._was_maximized_before_fullscreen:
+                self.showMaximized()
+            else:
+                self.showNormal()
+            self.statusBar().showMessage("Exited fullscreen.", 2000)
+        else:
+            self._was_maximized_before_fullscreen = self.isMaximized()
+            self.showFullScreen()
+            self.statusBar().showMessage(
+                "Fullscreen mode — press F11 or Esc to exit.", 3000
+            )
+
     def keyPressEvent(self, event):
         key = event.key()
+
+        # Esc exits fullscreen if currently in it (common convention).
+        # F11 itself is handled by the WindowShortcut registered in
+        # _init_shortcuts(), which works regardless of focused child widget.
+        if key == QtCore.Qt.Key_Escape and self.isFullScreen():
+            self.toggle_fullscreen()
+            return
+
         focused = QtWidgets.QApplication.focusWidget()
         is_input = isinstance(focused, (QtWidgets.QLineEdit, QtWidgets.QSpinBox,
                                         QtWidgets.QDoubleSpinBox, QtWidgets.QComboBox,
@@ -2388,6 +2476,19 @@ class SmartStockApp(QtWidgets.QMainWindow, Ui_MainWindow):
             QtWidgets.QMessageBox.information(self, "Reset Complete",
                                               "All inventory data has been cleared.")
             self.statusBar().showMessage("All inventory data wiped.", 5000)
+
+    # ── Encrypt the database file when the app closes ───────────────────
+    def closeEvent(self, event):
+        try:
+            encrypt_db_and_cleanup(self.db_name)
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(
+                self, "Encryption Warning",
+                f"Could not encrypt the database on close:\n{e}\n\n"
+                "Your data was saved, but the .db file may still be in "
+                "plaintext on disk."
+            )
+        super().closeEvent(event)
 
 
 # ─────────────────────────────────────────────────────────────────────
