@@ -25,8 +25,8 @@ def _derive_fernet_key(passphrase: str) -> bytes:
 _FERNET = Fernet(_derive_fernet_key(DB_ENCRYPTION_PASSPHRASE))
 
 
-def get_appdata_db_path(filename="smartstock.db"):
-    """Returns a per-user, OS-correct AppData path for the database file."""
+def get_appdata_dir():
+    """Returns the per-user SmartStock AppData folder (creates it if needed)."""
     if sys.platform == "win32":
         base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
         folder = os.path.join(base, "SmartStock")
@@ -36,7 +36,12 @@ def get_appdata_db_path(filename="smartstock.db"):
         base = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
         folder = os.path.join(base, "SmartStock")
     os.makedirs(folder, exist_ok=True)
-    return os.path.join(folder, filename)
+    return folder
+
+
+def get_appdata_db_path(filename="smartstock.db"):
+    """Returns a per-user, OS-correct AppData path for the database file."""
+    return os.path.join(get_appdata_dir(), filename)
 
 
 def decrypt_db_if_needed(db_path):
@@ -97,7 +102,8 @@ try:
 except ImportError:
     HAS_REPORTLAB = False
 
-BARCODE_DIR = "barcode_labels"
+# Absolute, writable barcode storage (same AppData root as the DB)
+BARCODE_DIR = os.path.join(get_appdata_dir(), "barcode_labels")
 
 # Matplotlib palettes aligned with each Qt theme (not only Default COLOR tokens)
 THEME_CHART_COLORS = {
@@ -792,19 +798,91 @@ class SmartStockApp(QtWidgets.QMainWindow, Ui_MainWindow):
     def _generate_sku(self):
         return f"SS-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
 
-    def _save_barcode_image(self, sku):
-        path = os.path.join(BARCODE_DIR, f"{sku}.png")
-        if HAS_BARCODE:
-            try:
-                Code128(sku, writer=ImageWriter()).save(
-                    os.path.join(BARCODE_DIR, sku)
+    def _barcode_image_path(self, sku):
+        """Absolute path for a SKU barcode PNG under AppData."""
+        return os.path.join(BARCODE_DIR, f"{sku}.png")
+
+    def _resolve_barcode_font(self):
+        """Find a usable TTF for barcode text (needed in frozen EXE builds)."""
+        candidates = []
+        try:
+            from barcode.writer import PATH as barcode_pkg_path
+            candidates.append(
+                os.path.join(barcode_pkg_path, "fonts", "DejaVuSansMono.ttf")
+            )
+        except Exception:
+            pass
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            candidates.append(
+                os.path.join(
+                    sys._MEIPASS, "barcode", "fonts", "DejaVuSansMono.ttf"
                 )
-                return os.path.join(BARCODE_DIR, f"{sku}.png")
-            except Exception:
-                pass
+            )
+        windir = os.environ.get("WINDIR", r"C:\Windows")
+        candidates.extend(
+            [
+                os.path.join(windir, "Fonts", "consola.ttf"),
+                os.path.join(windir, "Fonts", "arial.ttf"),
+                os.path.join(windir, "Fonts", "tahoma.ttf"),
+            ]
+        )
+        for path in candidates:
+            if path and os.path.isfile(path):
+                return path
         return None
 
+    def _log_barcode_error(self, message):
+        try:
+            log_path = os.path.join(get_appdata_dir(), "barcode_errors.log")
+            with open(log_path, "a", encoding="utf-8") as fh:
+                fh.write(f"{datetime.now().isoformat()} {message}\n")
+        except Exception:
+            pass
+        print(message, file=sys.stderr)
+
+    def _save_barcode_image(self, sku):
+        if not sku or not HAS_BARCODE:
+            if not HAS_BARCODE:
+                self._log_barcode_error(
+                    f"Barcode save skipped for {sku}: barcode/Pillow not available"
+                )
+            return None
+        os.makedirs(BARCODE_DIR, exist_ok=True)
+        out_path = self._barcode_image_path(sku)
+        try:
+            writer = ImageWriter()
+            options = {}
+            font_path = self._resolve_barcode_font()
+            if font_path:
+                options["font_path"] = font_path
+            else:
+                # Still render bars if no font can be found
+                options["write_text"] = False
+            # ImageWriter appends .png; pass path without extension
+            Code128(sku, writer=writer).save(
+                os.path.join(BARCODE_DIR, sku), options=options
+            )
+            if os.path.isfile(out_path):
+                return out_path
+            self._log_barcode_error(
+                f"Barcode save produced no file for {sku}: {out_path}"
+            )
+        except Exception as exc:
+            self._log_barcode_error(f"Barcode save failed for {sku}: {exc}")
+        return None
+
+    def _ensure_barcode_image(self, sku):
+        """Return absolute PNG path, regenerating if the file is missing."""
+        if not sku:
+            return None
+        path = self._barcode_image_path(sku)
+        if os.path.isfile(path):
+            return path
+        return self._save_barcode_image(sku)
+
     def _show_barcode_preview(self, image_path, sku=""):
+        if sku and (not image_path or not os.path.isfile(image_path)):
+            image_path = self._ensure_barcode_image(sku)
         if image_path and os.path.isfile(image_path):
             pix = QtGui.QPixmap(image_path)
             if not pix.isNull():
@@ -868,7 +946,7 @@ class SmartStockApp(QtWidgets.QMainWindow, Ui_MainWindow):
                 if col in (0, 4, 5):
                     cell.setTextAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
                 if col == 1:
-                    barcode_path = os.path.join(BARCODE_DIR, f"{sku}.png") if sku else ""
+                    barcode_path = self._barcode_image_path(sku) if sku else ""
                     cell.setData(QtCore.Qt.UserRole, barcode_path)
                 if col == 4:
                     cell.setData(QtCore.Qt.UserRole, reorder_level)
@@ -1240,6 +1318,13 @@ class SmartStockApp(QtWidgets.QMainWindow, Ui_MainWindow):
     def render_analytics_graphs(self):
         if not HAS_MPL:
             return
+        try:
+            self._render_analytics_graphs_impl()
+        except Exception as exc:
+            # Never let chart failures crash app startup (common in frozen EXE)
+            print(f"Analytics chart render failed: {exc}", file=sys.stderr)
+
+    def _render_analytics_graphs_impl(self):
         while self.analytics_charts_layout.count():
             child = self.analytics_charts_layout.takeAt(0)
             if child.widget():
@@ -1266,8 +1351,17 @@ class SmartStockApp(QtWidgets.QMainWindow, Ui_MainWindow):
             )
             low_rows = c.fetchall()
         pie_palette = colors["palette"]
-        if cat_rows:
-            labels, values = zip(*cat_rows)
+        pie_data = []
+        for label, value in cat_rows:
+            try:
+                numeric = float(value) if value is not None else 0.0
+            except (TypeError, ValueError):
+                numeric = 0.0
+            # Skip zeros / NaN / negatives — matplotlib pie crashes on NaN
+            if numeric > 0 and numeric == numeric:
+                pie_data.append((str(label), numeric))
+        if pie_data:
+            labels, values = zip(*pie_data)
             ax_pie.pie(
                 values,
                 labels=labels,
@@ -1295,7 +1389,17 @@ class SmartStockApp(QtWidgets.QMainWindow, Ui_MainWindow):
             )
         if low_rows:
             names = [r[0][:18] for r in low_rows]
-            ratios = [int(r[1]) / max(int(r[2]), 1) for r in low_rows]
+            ratios = []
+            for r in low_rows:
+                try:
+                    qty = float(r[1] if r[1] is not None else 0)
+                    reorder = float(r[2] if r[2] is not None else 1)
+                except (TypeError, ValueError):
+                    qty, reorder = 0.0, 1.0
+                if reorder != reorder or reorder <= 0:
+                    reorder = 1.0
+                ratio = qty / reorder
+                ratios.append(ratio if ratio == ratio else 0.0)
             y_pos = range(len(names))
             ax_bar.barh(y_pos, ratios, color=colors["error"], alpha=0.88)
             ax_bar.set_yticks(y_pos)

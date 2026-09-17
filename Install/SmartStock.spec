@@ -1,12 +1,24 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_data_files
+
+# python-barcode needs its .ttf fonts to render PNG labels in a frozen EXE
+barcode_datas = collect_data_files("barcode")
 
 a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[('app_icon.ico', '.')],
-    hiddenimports=[],
+    datas=[('app_icon.ico', '.')] + barcode_datas,
+    hiddenimports=[
+        "barcode",
+        "barcode.codex",
+        "barcode.writer",
+        "PIL",
+        "PIL.Image",
+        "PIL.ImageDraw",
+        "PIL.ImageFont",
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
