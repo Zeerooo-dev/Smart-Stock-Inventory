@@ -43,7 +43,9 @@ class _InventoryPageViewState extends State<InventoryPageView> {
         _quantity.text = '0';
         _price.text = '0.00';
         _reorder.text = '5';
-        _category = widget.controller.categories.isEmpty ? null : widget.controller.categories.first.name;
+        _category = widget.controller.categories.isEmpty
+            ? null
+            : widget.controller.categories.first.name;
       } else {
         _name.text = item.name;
         _quantity.text = '${item.quantity}';
@@ -55,7 +57,9 @@ class _InventoryPageViewState extends State<InventoryPageView> {
     if (_search.text != widget.controller.inventorySearch) {
       _search.value = TextEditingValue(
         text: widget.controller.inventorySearch,
-        selection: TextSelection.collapsed(offset: widget.controller.inventorySearch.length),
+        selection: TextSelection.collapsed(
+          offset: widget.controller.inventorySearch.length,
+        ),
       );
     }
   }
@@ -67,7 +71,9 @@ class _InventoryPageViewState extends State<InventoryPageView> {
     _quantity.text = '0';
     _price.text = '0.00';
     _reorder.text = '5';
-    _category = widget.controller.categories.isEmpty ? null : widget.controller.categories.first.name;
+    _category = widget.controller.categories.isEmpty
+        ? null
+        : widget.controller.categories.first.name;
     setState(() {});
   }
 
@@ -76,8 +82,14 @@ class _InventoryPageViewState extends State<InventoryPageView> {
     final qty = int.tryParse(_quantity.text.trim());
     final price = double.tryParse(_price.text.trim());
     final reorder = int.tryParse(_reorder.text.trim());
-    if (name.isEmpty || qty == null || price == null || reorder == null || _category == null) {
-      _error('Enter a valid name, category, quantity, unit price, and reorder threshold.');
+    if (name.isEmpty ||
+        qty == null ||
+        price == null ||
+        reorder == null ||
+        _category == null) {
+      _error(
+        'Enter a valid name, category, quantity, unit price, and reorder threshold.',
+      );
       return;
     }
 
@@ -113,13 +125,16 @@ class _InventoryPageViewState extends State<InventoryPageView> {
 
   void _error(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _deleteItem(InventoryItem item) async {
     final ok = await showSmartConfirm(
       context,
-      message: "Permanently delete '${item.name}' from inventory?\n\nIts existing audit history will remain in the ledger.",
+      message:
+          "Permanently delete '${item.name}' from inventory?\n\nIts existing audit history will remain in the ledger.",
     );
     if (!ok) return;
     try {
@@ -154,9 +169,17 @@ class _InventoryPageViewState extends State<InventoryPageView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(item.name, style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              item.name,
+              style: Theme.of(
+                sheetContext,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 4),
-            Text('${item.sku} · ${item.category}', style: Theme.of(sheetContext).textTheme.bodySmall),
+            Text(
+              '${item.sku} · ${item.category}',
+              style: Theme.of(sheetContext).textTheme.bodySmall,
+            ),
             const SizedBox(height: 16),
             _SheetAction(
               icon: Icons.edit_outlined,
@@ -164,7 +187,11 @@ class _InventoryPageViewState extends State<InventoryPageView> {
               onTap: () {
                 Navigator.pop(sheetContext);
                 if (_pageScroll.hasClients) {
-                  _pageScroll.animateTo(0, duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
+                  _pageScroll.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOut,
+                  );
                 }
               },
             ),
@@ -214,7 +241,11 @@ class _InventoryPageViewState extends State<InventoryPageView> {
       builder: (context, constraints) {
         final expanded = constraints.maxWidth >= 1100;
         final compact = constraints.maxWidth < 600;
-        final padding = expanded ? 24.0 : compact ? 12.0 : 18.0;
+        final padding = expanded
+            ? 24.0
+            : compact
+            ? 12.0
+            : 18.0;
 
         if (expanded) {
           return Padding(
@@ -222,9 +253,19 @@ class _InventoryPageViewState extends State<InventoryPageView> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(width: 360, child: _buildForm(context, fillHeight: true, compact: false)),
+                SizedBox(
+                  width: 360,
+                  child: _buildForm(context, fillHeight: true, compact: false),
+                ),
                 const SizedBox(width: 20),
-                Expanded(child: _buildInventory(context, bounded: true, useTable: true, compact: false)),
+                Expanded(
+                  child: _buildInventory(
+                    context,
+                    bounded: true,
+                    useTable: true,
+                    compact: false,
+                  ),
+                ),
               ],
             ),
           );
@@ -236,7 +277,12 @@ class _InventoryPageViewState extends State<InventoryPageView> {
           children: [
             _buildForm(context, fillHeight: false, compact: compact),
             const SizedBox(height: 14),
-            _buildInventory(context, bounded: false, useTable: false, compact: compact),
+            _buildInventory(
+              context,
+              bounded: false,
+              useTable: false,
+              compact: compact,
+            ),
             const SizedBox(height: 20),
           ],
         );
@@ -244,7 +290,11 @@ class _InventoryPageViewState extends State<InventoryPageView> {
     );
   }
 
-  Widget _buildForm(BuildContext context, {required bool fillHeight, required bool compact}) {
+  Widget _buildForm(
+    BuildContext context, {
+    required bool fillHeight,
+    required bool compact,
+  }) {
     final selected = widget.controller.selectedItem;
     final fields = LayoutBuilder(
       builder: (context, box) {
@@ -259,18 +309,38 @@ class _InventoryPageViewState extends State<InventoryPageView> {
               child: TextField(
                 controller: _name,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: 'Item Name', prefixIcon: Icon(Icons.inventory_2_outlined)),
+                decoration: const InputDecoration(
+                  labelText: 'Item Name',
+                  prefixIcon: Icon(Icons.inventory_2_outlined),
+                ),
               ),
             ),
             SizedBox(
               width: fieldWidth,
               child: DropdownButtonFormField<String>(
-                initialValue: widget.controller.categories.any((c) => c.name == _category) ? _category : null,
-                key: ValueKey('category-${_category ?? ''}-${widget.controller.categories.length}'),
+                initialValue:
+                    widget.controller.categories.any((c) => c.name == _category)
+                    ? _category
+                    : null,
+                key: ValueKey(
+                  'category-${_category ?? ''}-${widget.controller.categories.length}',
+                ),
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Category', prefixIcon: Icon(Icons.category_outlined)),
+                decoration: const InputDecoration(
+                  labelText: 'Category',
+                  prefixIcon: Icon(Icons.category_outlined),
+                ),
                 items: widget.controller.categories
-                    .map((c) => DropdownMenuItem(value: c.name, child: Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis)))
+                    .map(
+                      (c) => DropdownMenuItem(
+                        value: c.name,
+                        child: Text(
+                          c.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
                     .toList(),
                 onChanged: (value) => setState(() => _category = value),
               ),
@@ -281,16 +351,24 @@ class _InventoryPageViewState extends State<InventoryPageView> {
                 controller: _quantity,
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: 'Quantity', prefixIcon: Icon(Icons.numbers)),
+                decoration: const InputDecoration(
+                  labelText: 'Quantity',
+                  prefixIcon: Icon(Icons.numbers),
+                ),
               ),
             ),
             SizedBox(
               width: fieldWidth,
               child: TextField(
                 controller: _price,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: 'Unit Price (PHP)', prefixIcon: Icon(Icons.payments_outlined)),
+                decoration: const InputDecoration(
+                  labelText: 'Unit Price (PHP)',
+                  prefixIcon: Icon(Icons.payments_outlined),
+                ),
               ),
             ),
             SizedBox(
@@ -298,7 +376,10 @@ class _InventoryPageViewState extends State<InventoryPageView> {
               child: TextField(
                 controller: _reorder,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Reorder Threshold', prefixIcon: Icon(Icons.notification_important_outlined)),
+                decoration: const InputDecoration(
+                  labelText: 'Reorder Threshold',
+                  prefixIcon: Icon(Icons.notification_important_outlined),
+                ),
               ),
             ),
           ],
@@ -337,7 +418,9 @@ class _InventoryPageViewState extends State<InventoryPageView> {
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
-            onPressed: selected == null ? () => _save(update: false) : () => _save(update: true),
+            onPressed: selected == null
+                ? () => _save(update: false)
+                : () => _save(update: true),
             icon: Icon(selected == null ? Icons.add : Icons.save_outlined),
             label: Text(selected == null ? 'Add Item' : 'Save Changes'),
           ),
@@ -364,7 +447,9 @@ class _InventoryPageViewState extends State<InventoryPageView> {
               children: [
                 Text(
                   selected == null ? 'Add New Item' : 'Edit Inventory Item',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -394,8 +479,8 @@ class _InventoryPageViewState extends State<InventoryPageView> {
             child: Center(child: Text('No inventory items found.')),
           )
         : useTable
-            ? _desktopTable(context)
-            : _mobileList(context);
+        ? _desktopTable(context)
+        : _mobileList(context);
 
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -430,41 +515,52 @@ class _InventoryPageViewState extends State<InventoryPageView> {
   }
 
   Widget _inventoryTitle(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Inventory', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 2),
-          Text('${widget.controller.inventoryPage.total} item(s) matched', style: Theme.of(context).textTheme.bodySmall),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'Inventory',
+        style: Theme.of(
+          context,
+        ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        '${widget.controller.inventoryPage.total} item(s) matched',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+    ],
+  );
 
   Widget _searchField() => TextField(
-        controller: _search,
-        decoration: InputDecoration(
-          prefixIcon: const Icon(Icons.search),
-          hintText: 'Search inventory',
-          suffixIcon: _search.text.isEmpty
-              ? null
-              : IconButton(
-                  tooltip: 'Clear search',
-                  onPressed: () {
-                    _search.clear();
-                    widget.controller.setInventorySearch('');
-                    setState(() {});
-                  },
-                  icon: const Icon(Icons.close),
-                ),
-        ),
-        onChanged: (value) {
-          widget.controller.setInventorySearch(value);
-          setState(() {});
-        },
-      );
+    controller: _search,
+    decoration: InputDecoration(
+      prefixIcon: const Icon(Icons.search),
+      hintText: 'Search inventory',
+      suffixIcon: _search.text.isEmpty
+          ? null
+          : IconButton(
+              tooltip: 'Clear search',
+              onPressed: () {
+                _search.clear();
+                widget.controller.setInventorySearch('');
+                setState(() {});
+              },
+              icon: const Icon(Icons.close),
+            ),
+    ),
+    onChanged: (value) {
+      widget.controller.setInventorySearch(value);
+      setState(() {});
+    },
+  );
 
   Widget _pagination(BuildContext context, {required bool compact}) {
     final previousEnabled = widget.controller.inventoryPageIndex > 0;
-    final nextEnabled = (widget.controller.inventoryPageIndex + 1) * 50 < widget.controller.inventoryPage.total;
-    final label = 'Page ${widget.controller.inventoryPageIndex + 1} of ${widget.controller.inventoryTotalPages}';
+    final nextEnabled =
+        (widget.controller.inventoryPageIndex + 1) * 50 <
+        widget.controller.inventoryPage.total;
+    final label =
+        'Page ${widget.controller.inventoryPageIndex + 1} of ${widget.controller.inventoryTotalPages}';
 
     if (compact) {
       return Padding(
@@ -472,13 +568,19 @@ class _InventoryPageViewState extends State<InventoryPageView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(label, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: previousEnabled ? widget.controller.inventoryPrev : null,
+                    onPressed: previousEnabled
+                        ? widget.controller.inventoryPrev
+                        : null,
                     icon: const Icon(Icons.chevron_left),
                     label: const Text('Previous'),
                   ),
@@ -486,7 +588,9 @@ class _InventoryPageViewState extends State<InventoryPageView> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton.tonalIcon(
-                    onPressed: nextEnabled ? widget.controller.inventoryNext : null,
+                    onPressed: nextEnabled
+                        ? widget.controller.inventoryNext
+                        : null,
                     icon: const Icon(Icons.chevron_right),
                     label: const Text('Next'),
                   ),
@@ -502,7 +606,10 @@ class _InventoryPageViewState extends State<InventoryPageView> {
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          Text('$label · ${widget.controller.inventoryPage.total} total', style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            '$label · ${widget.controller.inventoryPage.total} total',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const Spacer(),
           OutlinedButton.icon(
             onPressed: previousEnabled ? widget.controller.inventoryPrev : null,
@@ -536,7 +643,10 @@ class _InventoryPageViewState extends State<InventoryPageView> {
           ],
           rows: widget.controller.inventoryPage.items.map((item) {
             final lowStyle = item.isLowStock
-                ? TextStyle(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.bold)
+                ? TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontWeight: FontWeight.bold,
+                  )
                 : null;
             return DataRow(
               selected: widget.controller.selectedItem?.id == item.id,
@@ -544,7 +654,12 @@ class _InventoryPageViewState extends State<InventoryPageView> {
               cells: [
                 DataCell(Text('#INV-${item.id.toString().padLeft(5, '0')}')),
                 DataCell(Text(item.sku)),
-                DataCell(SizedBox(width: 200, child: Text(item.name, overflow: TextOverflow.ellipsis))),
+                DataCell(
+                  SizedBox(
+                    width: 200,
+                    child: Text(item.name, overflow: TextOverflow.ellipsis),
+                  ),
+                ),
                 DataCell(Text(item.category)),
                 DataCell(Text('${item.quantity}', style: lowStyle)),
                 DataCell(Text('₱ ${item.unitPrice.toStringAsFixed(2)}')),
@@ -568,10 +683,14 @@ class _InventoryPageViewState extends State<InventoryPageView> {
         final selected = widget.controller.selectedItem?.id == item.id;
         final scheme = Theme.of(context).colorScheme;
         return Material(
-          color: selected ? scheme.secondaryContainer.withValues(alpha: .5) : scheme.surfaceContainerLowest,
+          color: selected
+              ? scheme.secondaryContainer.withValues(alpha: .5)
+              : scheme.surfaceContainerLowest,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
-            side: BorderSide(color: selected ? scheme.primary : scheme.outlineVariant),
+            side: BorderSide(
+              color: selected ? scheme.primary : scheme.outlineVariant,
+            ),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -585,7 +704,9 @@ class _InventoryPageViewState extends State<InventoryPageView> {
                     width: 46,
                     height: 46,
                     decoration: BoxDecoration(
-                      color: item.isLowStock ? scheme.errorContainer : scheme.primaryContainer,
+                      color: item.isLowStock
+                          ? scheme.errorContainer
+                          : scheme.primaryContainer,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     alignment: Alignment.center,
@@ -593,7 +714,9 @@ class _InventoryPageViewState extends State<InventoryPageView> {
                       '${item.quantity}',
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
-                        color: item.isLowStock ? scheme.onErrorContainer : scheme.onPrimaryContainer,
+                        color: item.isLowStock
+                            ? scheme.onErrorContainer
+                            : scheme.onPrimaryContainer,
                       ),
                     ),
                   ),
@@ -602,17 +725,36 @@ class _InventoryPageViewState extends State<InventoryPageView> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        Text(
+                          item.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
                         const SizedBox(height: 4),
-                        Text(item.sku, style: Theme.of(context).textTheme.bodySmall),
+                        Text(
+                          item.sku,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 6,
                           runSpacing: 6,
                           children: [
-                            _InfoPill(icon: Icons.category_outlined, text: item.category),
-                            _InfoPill(icon: Icons.payments_outlined, text: '₱${item.unitPrice.toStringAsFixed(2)}'),
-                            if (item.isLowStock) _InfoPill(icon: Icons.warning_amber_rounded, text: 'Low stock', alert: true),
+                            _InfoPill(
+                              icon: Icons.category_outlined,
+                              text: item.category,
+                            ),
+                            _InfoPill(
+                              icon: Icons.payments_outlined,
+                              text: '₱${item.unitPrice.toStringAsFixed(2)}',
+                            ),
+                            if (item.isLowStock)
+                              _InfoPill(
+                                icon: Icons.warning_amber_rounded,
+                                text: 'Low stock',
+                                alert: true,
+                              ),
                           ],
                         ),
                       ],
@@ -634,7 +776,12 @@ class _InventoryPageViewState extends State<InventoryPageView> {
 }
 
 class _SheetAction extends StatelessWidget {
-  const _SheetAction({required this.icon, required this.label, required this.onTap, this.destructive = false});
+  const _SheetAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.destructive = false,
+  });
   final IconData icon;
   final String label;
   final VoidCallback onTap;
@@ -646,7 +793,10 @@ class _SheetAction extends StatelessWidget {
     return ListTile(
       minTileHeight: 52,
       leading: Icon(icon, color: color),
-      title: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+      title: Text(
+        label,
+        style: TextStyle(color: color, fontWeight: FontWeight.w600),
+      ),
       onTap: onTap,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );
@@ -672,14 +822,20 @@ class _InfoPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: alert ? scheme.error : scheme.onSurfaceVariant),
+          Icon(
+            icon,
+            size: 14,
+            color: alert ? scheme.error : scheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
               text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: alert ? scheme.error : scheme.onSurfaceVariant),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: alert ? scheme.error : scheme.onSurfaceVariant,
+              ),
             ),
           ),
         ],

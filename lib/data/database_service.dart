@@ -9,7 +9,10 @@ import '../platform/database_factory.dart';
 import '../services/database_crypto.dart';
 
 class CsvImportResult {
-  const CsvImportResult({required this.imported, required this.skippedDuplicates});
+  const CsvImportResult({
+    required this.imported,
+    required this.skippedDuplicates,
+  });
   final int imported;
   final List<String> skippedDuplicates;
 }
@@ -25,10 +28,14 @@ class DatabaseService {
   DatabaseCrypto? _crypto;
 
   Database get db => _db ?? (throw StateError('Database is not initialized.'));
-  DatabaseFactory get factory => _factory ?? (throw StateError('Database factory is not initialized.'));
+  DatabaseFactory get factory =>
+      _factory ?? (throw StateError('Database factory is not initialized.'));
   String get path => _path ?? '';
 
-  Future<void> initialize({bool sandbox = false, String? legacyPassphrase}) async {
+  Future<void> initialize({
+    bool sandbox = false,
+    String? legacyPassphrase,
+  }) async {
     final info = await createSmartStockDatabaseFactory(sandbox: sandbox);
     _factory = info.factory;
     _path = info.path;
@@ -101,19 +108,27 @@ class DatabaseService {
   }
 
   Future<void> _migrate(Database database) async {
-    final ledgerInfo = await database.rawQuery('PRAGMA table_info(InventoryLedger)');
+    final ledgerInfo = await database.rawQuery(
+      'PRAGMA table_info(InventoryLedger)',
+    );
     final ledgerCols = ledgerInfo.map((e) => e['name']?.toString()).toSet();
     if (!ledgerCols.contains('ItemNameSnapshot')) {
-      await database.execute('ALTER TABLE InventoryLedger ADD COLUMN ItemNameSnapshot TEXT');
+      await database.execute(
+        'ALTER TABLE InventoryLedger ADD COLUMN ItemNameSnapshot TEXT',
+      );
     }
     if (!ledgerCols.contains('SupplierID')) {
-      await database.execute('ALTER TABLE InventoryLedger ADD COLUMN SupplierID INTEGER');
+      await database.execute(
+        'ALTER TABLE InventoryLedger ADD COLUMN SupplierID INTEGER',
+      );
     }
 
     final itemInfo = await database.rawQuery('PRAGMA table_info(Item)');
     final itemCols = itemInfo.map((e) => e['name']?.toString()).toSet();
     if (!itemCols.contains('ReorderLevel')) {
-      await database.execute('ALTER TABLE Item ADD COLUMN ReorderLevel INTEGER NOT NULL DEFAULT 5');
+      await database.execute(
+        'ALTER TABLE Item ADD COLUMN ReorderLevel INTEGER NOT NULL DEFAULT 5',
+      );
     }
     if (!itemCols.contains('SKU')) {
       await database.execute('ALTER TABLE Item ADD COLUMN SKU TEXT');
@@ -121,10 +136,19 @@ class DatabaseService {
   }
 
   Future<void> _seedCategories(DatabaseExecutor executor) async {
-    final count = Sqflite.firstIntValue(await executor.rawQuery('SELECT COUNT(*) FROM Category')) ?? 0;
+    final count =
+        Sqflite.firstIntValue(
+          await executor.rawQuery('SELECT COUNT(*) FROM Category'),
+        ) ??
+        0;
     if (count == 0) {
       final batch = executor.batch();
-      for (final name in ['Electronics', 'Stationery', 'Groceries', 'Hardware']) {
+      for (final name in [
+        'Electronics',
+        'Stationery',
+        'Groceries',
+        'Hardware',
+      ]) {
         batch.insert('Category', {'CategoryName': name});
       }
       await batch.commit(noResult: true);
@@ -149,7 +173,11 @@ class DatabaseService {
     required String itemName,
   }) async {
     if (!_validChangeTypes.contains(changeType)) {
-      throw ArgumentError.value(changeType, 'changeType', 'Unknown inventory ledger change type');
+      throw ArgumentError.value(
+        changeType,
+        'changeType',
+        'Unknown inventory ledger change type',
+      );
     }
     await executor.insert('InventoryLedger', {
       'ItemID': itemId,
@@ -161,7 +189,9 @@ class DatabaseService {
   }
 
   Future<List<CategoryRecord>> getCategories() async {
-    final rows = await db.rawQuery('SELECT CategoryID, CategoryName FROM Category ORDER BY CategoryName');
+    final rows = await db.rawQuery(
+      'SELECT CategoryID, CategoryName FROM Category ORDER BY CategoryName',
+    );
     return rows.map(CategoryRecord.fromMap).toList();
   }
 
@@ -172,26 +202,41 @@ class DatabaseService {
   }
 
   Future<void> removeCategory(String name) async {
-    final count = Sqflite.firstIntValue(await db.rawQuery(
-          'SELECT COUNT(*) FROM Item JOIN Category ON Item.CategoryID=Category.CategoryID '
-          'WHERE Category.CategoryName=?',
-          [name],
-        )) ??
+    final count =
+        Sqflite.firstIntValue(
+          await db.rawQuery(
+            'SELECT COUNT(*) FROM Item JOIN Category ON Item.CategoryID=Category.CategoryID '
+            'WHERE Category.CategoryName=?',
+            [name],
+          ),
+        ) ??
         0;
     if (count > 0) {
-      throw StateError("'$name' is used by $count item(s). Reassign or delete them first.");
+      throw StateError(
+        "'$name' is used by $count item(s). Reassign or delete them first.",
+      );
     }
     await db.delete('Category', where: 'CategoryName=?', whereArgs: [name]);
   }
 
-  Future<InventoryPage> getInventoryPage({String search = '', int page = 0}) async {
+  Future<InventoryPage> getInventoryPage({
+    String search = '',
+    int page = 0,
+  }) async {
     final clean = search.trim();
     final where = clean.isEmpty
         ? ''
         : ' WHERE (Item.ItemName LIKE ? OR Category.CategoryName LIKE ? OR Item.SKU LIKE ?)';
-    final args = clean.isEmpty ? <Object?>[] : List<Object?>.filled(3, '%$clean%');
-    const from = ' FROM Item JOIN Category ON Item.CategoryID = Category.CategoryID';
-    final total = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*)$from$where', args)) ?? 0;
+    final args = clean.isEmpty
+        ? <Object?>[]
+        : List<Object?>.filled(3, '%$clean%');
+    const from =
+        ' FROM Item JOIN Category ON Item.CategoryID = Category.CategoryID';
+    final total =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*)$from$where', args),
+        ) ??
+        0;
     final offset = page * inventoryPageSize;
     final rows = await db.rawQuery(
       'SELECT Item.ItemID, Item.SKU, Item.ItemName, Category.CategoryName, '
@@ -199,7 +244,10 @@ class DatabaseService {
       'ORDER BY Item.ItemID LIMIT ? OFFSET ?',
       [...args, inventoryPageSize, offset],
     );
-    return InventoryPage(items: rows.map(InventoryItem.fromMap).toList(), total: total);
+    return InventoryPage(
+      items: rows.map(InventoryItem.fromMap).toList(),
+      total: total,
+    );
   }
 
   Future<List<InventoryItem>> getAllInventory() async {
@@ -222,7 +270,10 @@ class DatabaseService {
   }
 
   Future<int> _categoryId(DatabaseExecutor executor, String category) async {
-    final rows = await executor.rawQuery('SELECT CategoryID FROM Category WHERE CategoryName=?', [category]);
+    final rows = await executor.rawQuery(
+      'SELECT CategoryID FROM Category WHERE CategoryName=?',
+      [category],
+    );
     if (rows.isEmpty) throw StateError('Category not found: $category');
     return (rows.first['CategoryID'] as num).toInt();
   }
@@ -246,7 +297,8 @@ class DatabaseService {
     if (trimmed.isEmpty) throw ArgumentError('Item name cannot be empty.');
     if (quantity < 0) throw ArgumentError('Quantity cannot be negative.');
     if (unitPrice < 0) throw ArgumentError('Unit price cannot be negative.');
-    if (reorderLevel < 0) throw ArgumentError('Reorder level cannot be negative.');
+    if (reorderLevel < 0)
+      throw ArgumentError('Reorder level cannot be negative.');
     return db.transaction((txn) async {
       final categoryId = await _categoryId(txn, category);
       final sku = generateSku();
@@ -282,7 +334,10 @@ class DatabaseService {
     if (trimmed.isEmpty) throw ArgumentError('Item name cannot be empty.');
     if (quantity < 0) throw ArgumentError('Quantity cannot be negative.');
     await db.transaction((txn) async {
-      final old = await txn.rawQuery('SELECT Quantity, UnitPrice FROM Item WHERE ItemID=?', [itemId]);
+      final old = await txn.rawQuery(
+        'SELECT Quantity, UnitPrice FROM Item WHERE ItemID=?',
+        [itemId],
+      );
       if (old.isEmpty) throw StateError('Item not found.');
       final oldQuantity = ((old.first['Quantity'] ?? 0) as num).toInt();
       final oldPrice = ((old.first['UnitPrice'] ?? 0) as num).toDouble();
@@ -313,9 +368,14 @@ class DatabaseService {
     });
   }
 
-  Future<void> deleteItem(int itemId) => db.delete('Item', where: 'ItemID=?', whereArgs: [itemId]);
+  Future<void> deleteItem(int itemId) =>
+      db.delete('Item', where: 'ItemID=?', whereArgs: [itemId]);
 
-  Future<void> adjustStock({required int itemId, required int amount, required bool restock}) async {
+  Future<void> adjustStock({
+    required int itemId,
+    required int amount,
+    required bool restock,
+  }) async {
     if (amount <= 0) throw ArgumentError('Amount must be greater than zero.');
     await db.transaction((txn) async {
       final rows = await txn.rawQuery(
@@ -330,7 +390,10 @@ class DatabaseService {
       if (current + delta < 0) {
         throw StateError('Cannot dispense $amount — only $current in stock.');
       }
-      await txn.rawUpdate('UPDATE Item SET Quantity = Quantity + ? WHERE ItemID=?', [delta, itemId]);
+      await txn.rawUpdate(
+        'UPDATE Item SET Quantity = Quantity + ? WHERE ItemID=?',
+        [delta, itemId],
+      );
       await _writeLedger(
         txn,
         itemId: itemId,
@@ -343,8 +406,16 @@ class DatabaseService {
   }
 
   Future<KpiSnapshot> getKpis() async {
-    final totals = await db.rawQuery('SELECT SUM(Quantity) AS Qty, SUM(Quantity*UnitPrice) AS Value FROM Item');
-    final low = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM Item WHERE Quantity < ReorderLevel')) ?? 0;
+    final totals = await db.rawQuery(
+      'SELECT SUM(Quantity) AS Qty, SUM(Quantity*UnitPrice) AS Value FROM Item',
+    );
+    final low =
+        Sqflite.firstIntValue(
+          await db.rawQuery(
+            'SELECT COUNT(*) FROM Item WHERE Quantity < ReorderLevel',
+          ),
+        ) ??
+        0;
     return KpiSnapshot(
       totalQuantity: ((totals.first['Qty'] ?? 0) as num).toInt(),
       lowStockCount: low,
@@ -362,11 +433,13 @@ class DatabaseService {
       ORDER BY Category.CategoryName
     ''');
     return rows
-        .map((r) => CategorySummary(
-              category: (r['CategoryName'] ?? '').toString(),
-              quantity: ((r['Quantity'] ?? 0) as num).toInt(),
-              value: ((r['Value'] ?? 0) as num).toDouble(),
-            ))
+        .map(
+          (r) => CategorySummary(
+            category: (r['CategoryName'] ?? '').toString(),
+            quantity: ((r['Quantity'] ?? 0) as num).toInt(),
+            value: ((r['Value'] ?? 0) as num).toDouble(),
+          ),
+        )
         .toList();
   }
 
@@ -376,16 +449,23 @@ class DatabaseService {
       ORDER BY CAST(Quantity AS REAL) / MAX(ReorderLevel, 1) ASC LIMIT 5
     ''');
     return rows
-        .map((r) => LowStockThreat(
-              name: (r['ItemName'] ?? '').toString(),
-              quantity: ((r['Quantity'] ?? 0) as num).toInt(),
-              reorderLevel: ((r['ReorderLevel'] ?? 5) as num).toInt(),
-            ))
+        .map(
+          (r) => LowStockThreat(
+            name: (r['ItemName'] ?? '').toString(),
+            quantity: ((r['Quantity'] ?? 0) as num).toInt(),
+            reorderLevel: ((r['ReorderLevel'] ?? 5) as num).toInt(),
+          ),
+        )
         .toList();
   }
 
-  Future<CsvImportResult> importInventoryRows(List<Map<String, String>> rows) async {
-    final incomingNames = rows.map((e) => (e['ItemName'] ?? '').trim()).where((e) => e.isNotEmpty).toSet();
+  Future<CsvImportResult> importInventoryRows(
+    List<Map<String, String>> rows,
+  ) async {
+    final incomingNames = rows
+        .map((e) => (e['ItemName'] ?? '').trim())
+        .where((e) => e.isNotEmpty)
+        .toSet();
     final existing = <String>{};
     if (incomingNames.isNotEmpty) {
       final placeholders = List.filled(incomingNames.length, '?').join(',');
@@ -405,15 +485,26 @@ class DatabaseService {
         final category = (row['Category'] ?? '').trim();
         final quantity = int.tryParse((row['Quantity'] ?? '').trim());
         final price = double.tryParse((row['UnitPrice'] ?? '').trim());
-        if (name.isEmpty) throw FormatException('Row $rowNumber: ItemName is blank.');
-        if (category.isEmpty) throw FormatException('Row $rowNumber: Category is blank.');
-        if (quantity == null || quantity < 0) throw FormatException('Row $rowNumber: Quantity must be a non-negative integer.');
-        if (price == null || price < 0) throw FormatException('Row $rowNumber: UnitPrice must be a non-negative number.');
+        if (name.isEmpty)
+          throw FormatException('Row $rowNumber: ItemName is blank.');
+        if (category.isEmpty)
+          throw FormatException('Row $rowNumber: Category is blank.');
+        if (quantity == null || quantity < 0)
+          throw FormatException(
+            'Row $rowNumber: Quantity must be a non-negative integer.',
+          );
+        if (price == null || price < 0)
+          throw FormatException(
+            'Row $rowNumber: UnitPrice must be a non-negative number.',
+          );
         if (existing.contains(name)) {
           skipped.add(name);
           continue;
         }
-        var categoryRows = await txn.rawQuery('SELECT CategoryID FROM Category WHERE CategoryName=?', [category]);
+        var categoryRows = await txn.rawQuery(
+          'SELECT CategoryID FROM Category WHERE CategoryName=?',
+          [category],
+        );
         int categoryId;
         if (categoryRows.isEmpty) {
           categoryId = await txn.insert('Category', {'CategoryName': category});
@@ -457,7 +548,9 @@ class DatabaseService {
     final clauses = <String>[];
     final args = <Object?>[];
     if (filter.itemName != null && filter.itemName!.isNotEmpty) {
-      clauses.add("COALESCE(i.ItemName, il.ItemNameSnapshot, '[Deleted Item]') = ?");
+      clauses.add(
+        "COALESCE(i.ItemName, il.ItemNameSnapshot, '[Deleted Item]') = ?",
+      );
       args.add(filter.itemName);
     }
     if (filter.changeType != null && filter.changeType!.isNotEmpty) {
@@ -468,13 +561,24 @@ class DatabaseService {
     clauses.add('date(il.Timestamp) <= date(?)');
     args.add(DateFormat('yyyy-MM-dd').format(filter.dateFrom));
     args.add(DateFormat('yyyy-MM-dd').format(filter.dateTo));
-    return (sql: clauses.isEmpty ? '' : ' WHERE ${clauses.join(' AND ')}', args: args);
+    return (
+      sql: clauses.isEmpty ? '' : ' WHERE ${clauses.join(' AND ')}',
+      args: args,
+    );
   }
 
-  Future<LedgerPage> getAuditPage({required AuditFilter filter, int page = 0}) async {
+  Future<LedgerPage> getAuditPage({
+    required AuditFilter filter,
+    int page = 0,
+  }) async {
     final where = _auditWhere(filter);
-    const from = ' FROM InventoryLedger il LEFT JOIN Item i ON il.ItemID=i.ItemID';
-    final total = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*)$from${where.sql}', where.args)) ?? 0;
+    const from =
+        ' FROM InventoryLedger il LEFT JOIN Item i ON il.ItemID=i.ItemID';
+    final total =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*)$from${where.sql}', where.args),
+        ) ??
+        0;
     final rows = await db.rawQuery(
       '''SELECT il.LedgerID AS LedgerID, il.Timestamp AS Timestamp,
       COALESCE(i.ItemName, il.ItemNameSnapshot, '[Deleted Item]') AS ItemName,
@@ -488,12 +592,16 @@ class DatabaseService {
       ORDER BY il.LedgerID DESC LIMIT ? OFFSET ?''',
       [...where.args, auditPageSize, page * auditPageSize],
     );
-    return LedgerPage(entries: rows.map(LedgerEntry.fromMap).toList(), total: total);
+    return LedgerPage(
+      entries: rows.map(LedgerEntry.fromMap).toList(),
+      total: total,
+    );
   }
 
   Future<List<LedgerEntry>> getAllAuditEntries(AuditFilter filter) async {
     final where = _auditWhere(filter);
-    const from = ' FROM InventoryLedger il LEFT JOIN Item i ON il.ItemID=i.ItemID';
+    const from =
+        ' FROM InventoryLedger il LEFT JOIN Item i ON il.ItemID=i.ItemID';
     final rows = await db.rawQuery(
       '''SELECT il.LedgerID AS LedgerID, il.Timestamp AS Timestamp,
       COALESCE(i.ItemName, il.ItemNameSnapshot, '[Deleted Item]') AS ItemName,
@@ -510,16 +618,25 @@ class DatabaseService {
   }
 
   Future<ItemHistorySnapshot> getItemHistory(int itemId, {int page = 0}) async {
-    final currentRows = await db.rawQuery('SELECT Quantity FROM Item WHERE ItemID=?', [itemId]);
-    final current = currentRows.isEmpty ? 0 : ((currentRows.first['Quantity'] ?? 0) as num).toInt();
-    final stats = await db.rawQuery('''
+    final currentRows = await db.rawQuery(
+      'SELECT Quantity FROM Item WHERE ItemID=?',
+      [itemId],
+    );
+    final current = currentRows.isEmpty
+        ? 0
+        : ((currentRows.first['Quantity'] ?? 0) as num).toInt();
+    final stats = await db.rawQuery(
+      '''
       SELECT COUNT(*) AS Total,
       COALESCE(SUM(CASE WHEN DeltaQuantity > 0 THEN DeltaQuantity ELSE 0 END), 0) AS Added,
       COALESCE(SUM(CASE WHEN DeltaQuantity < 0 THEN -DeltaQuantity ELSE 0 END), 0) AS Removed
       FROM InventoryLedger WHERE ItemID=?
-    ''', [itemId]);
+    ''',
+      [itemId],
+    );
     final total = ((stats.first['Total'] ?? 0) as num).toInt();
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT LedgerID, Timestamp, '' AS ItemName, '' AS SKU, ChangeType,
              DeltaQuantity, PriceSnapshot,
              SUM(DeltaQuantity) OVER (
@@ -528,7 +645,9 @@ class DatabaseService {
              ) AS RunningBalance
       FROM InventoryLedger WHERE ItemID=?
       ORDER BY LedgerID DESC LIMIT ? OFFSET ?
-    ''', [itemId, historyPageSize, page * historyPageSize]);
+    ''',
+      [itemId, historyPageSize, page * historyPageSize],
+    );
     return ItemHistorySnapshot(
       currentQuantity: current,
       totalAdded: ((stats.first['Added'] ?? 0) as num).toInt(),
@@ -539,7 +658,8 @@ class DatabaseService {
   }
 
   Future<List<LedgerEntry>> getAllItemHistory(int itemId) async {
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT LedgerID, Timestamp, '' AS ItemName, '' AS SKU, ChangeType,
              DeltaQuantity, PriceSnapshot,
              SUM(DeltaQuantity) OVER (
@@ -547,7 +667,9 @@ class DatabaseService {
                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
              ) AS RunningBalance
       FROM InventoryLedger WHERE ItemID=? ORDER BY LedgerID
-    ''', [itemId]);
+    ''',
+      [itemId],
+    );
     return rows.map(LedgerEntry.fromMap).toList();
   }
 
@@ -559,20 +681,37 @@ class DatabaseService {
       );
       if (ledgerRows.isEmpty) throw StateError('Ledger entry not found.');
       final itemIdValue = ledgerRows.first['ItemID'];
-      if (itemIdValue == null) throw StateError('The associated item was deleted. Rollback is not possible.');
+      if (itemIdValue == null)
+        throw StateError(
+          'The associated item was deleted. Rollback is not possible.',
+        );
       final itemId = (itemIdValue as num).toInt();
-      final originalDelta = ((ledgerRows.first['DeltaQuantity'] ?? 0) as num).toInt();
+      final originalDelta = ((ledgerRows.first['DeltaQuantity'] ?? 0) as num)
+          .toInt();
       final inverse = -originalDelta;
-      final price = ((ledgerRows.first['PriceSnapshot'] ?? 0) as num).toDouble();
-      final itemRows = await txn.rawQuery('SELECT Quantity, ItemName FROM Item WHERE ItemID=?', [itemId]);
+      final price = ((ledgerRows.first['PriceSnapshot'] ?? 0) as num)
+          .toDouble();
+      final itemRows = await txn.rawQuery(
+        'SELECT Quantity, ItemName FROM Item WHERE ItemID=?',
+        [itemId],
+      );
       if (itemRows.isEmpty) throw StateError('Item no longer exists.');
       final current = ((itemRows.first['Quantity'] ?? 0) as num).toInt();
-      final itemName = (itemRows.first['ItemName'] ?? ledgerRows.first['ItemNameSnapshot'] ?? '').toString();
+      final itemName =
+          (itemRows.first['ItemName'] ??
+                  ledgerRows.first['ItemNameSnapshot'] ??
+                  '')
+              .toString();
       final projected = current + inverse;
       if (projected < 0) {
-        throw StateError('Rollback blocked: applying ${inverse >= 0 ? '+' : ''}$inverse would result in $projected units.');
+        throw StateError(
+          'Rollback blocked: applying ${inverse >= 0 ? '+' : ''}$inverse would result in $projected units.',
+        );
       }
-      await txn.rawUpdate('UPDATE Item SET Quantity=Quantity+? WHERE ItemID=?', [inverse, itemId]);
+      await txn.rawUpdate(
+        'UPDATE Item SET Quantity=Quantity+? WHERE ItemID=?',
+        [inverse, itemId],
+      );
       await _writeLedger(
         txn,
         itemId: itemId,
@@ -591,7 +730,13 @@ class DatabaseService {
     return rows.map(SupplierRecord.fromMap).toList();
   }
 
-  Future<void> saveSupplier({int? id, required String name, String email = '', String phone = '', String notes = ''}) async {
+  Future<void> saveSupplier({
+    int? id,
+    required String name,
+    String email = '',
+    String phone = '',
+    String notes = '',
+  }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw ArgumentError('Company name is required.');
     final values = {
@@ -603,11 +748,17 @@ class DatabaseService {
     if (id == null) {
       await db.insert('Supplier', values);
     } else {
-      await db.update('Supplier', values, where: 'SupplierID=?', whereArgs: [id]);
+      await db.update(
+        'Supplier',
+        values,
+        where: 'SupplierID=?',
+        whereArgs: [id],
+      );
     }
   }
 
-  Future<void> deleteSupplier(int id) => db.delete('Supplier', where: 'SupplierID=?', whereArgs: [id]);
+  Future<void> deleteSupplier(int id) =>
+      db.delete('Supplier', where: 'SupplierID=?', whereArgs: [id]);
 
   Future<void> resetInventory() => db.delete('Item');
 
@@ -626,13 +777,18 @@ class DatabaseService {
       await factory.writeDatabaseBytes(path, Uint8List.fromList(bytes));
       await _open();
       // Force a basic schema read so invalid/non-SmartStock files fail here.
-      await db.rawQuery('SELECT CategoryID, CategoryName FROM Category LIMIT 1');
+      await db.rawQuery(
+        'SELECT CategoryID, CategoryName FROM Category LIMIT 1',
+      );
       await db.rawQuery('SELECT ItemID, ItemName FROM Item LIMIT 1');
     } catch (_) {
       await _db?.close();
       _db = null;
       if (previousBytes.isNotEmpty) {
-        await factory.writeDatabaseBytes(path, Uint8List.fromList(previousBytes));
+        await factory.writeDatabaseBytes(
+          path,
+          Uint8List.fromList(previousBytes),
+        );
         await _open();
       }
       rethrow;

@@ -2,7 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
-bool get _isDesktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+bool get _isDesktop =>
+    Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
 Future<void> initializeDesktopWindow() async {
   if (!_isDesktop) return;

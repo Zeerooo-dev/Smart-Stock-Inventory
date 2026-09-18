@@ -26,7 +26,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _error(Object e) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -42,8 +44,12 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _pickAccent() async {
-    final initial = widget.controller.customAccent ?? Theme.of(context).colorScheme.primary;
-    final picked = await showDialog<Color>(context: context, builder: (_) => _RgbPicker(initial: initial));
+    final initial =
+        widget.controller.customAccent ?? Theme.of(context).colorScheme.primary;
+    final picked = await showDialog<Color>(
+      context: context,
+      builder: (_) => _RgbPicker(initial: initial),
+    );
     if (picked != null) {
       _hex.text = _toHex(picked);
       widget.controller.setAccent(picked);
@@ -55,14 +61,16 @@ class _SettingsPageState extends State<SettingsPage> {
     final first = await showSmartConfirm(
       context,
       title: 'Reset All Inventory',
-      message: 'WARNING\n\nThis will permanently delete every inventory item.\nCategories will be kept.',
+      message:
+          'WARNING\n\nThis will permanently delete every inventory item.\nCategories will be kept.',
       confirmLabel: 'Continue',
     );
     if (!first || !mounted) return;
     final second = await showSmartConfirm(
       context,
       title: 'Final Confirmation',
-      message: 'This is the final confirmation. Delete all inventory items now?',
+      message:
+          'This is the final confirmation. Delete all inventory items now?',
       confirmLabel: 'Reset All Data',
     );
     if (!second) return;
@@ -79,19 +87,36 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 600;
         final expanded = constraints.maxWidth >= 1100;
-        final padding = expanded ? 28.0 : compact ? 12.0 : 18.0;
+        final padding = expanded
+            ? 28.0
+            : compact
+            ? 12.0
+            : 18.0;
 
         return ListView(
           padding: EdgeInsets.all(padding),
           children: [
-            Text('System Settings', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'System Settings',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 4),
-            Text('Manage data, appearance, categories, and local storage.', style: Theme.of(context).textTheme.bodyMedium),
+            Text(
+              'Manage data, appearance, categories, and local storage.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
             const SizedBox(height: 20),
             _SectionCard(
               title: 'Data & Backup',
-              subtitle: 'Local SQLite storage, backups, and migration from the PyQt edition.',
-              child: _DataActions(controller: widget.controller, compact: compact, onError: _error),
+              subtitle:
+                  'Local SQLite storage, backups, and migration from the PyQt edition.',
+              child: _DataActions(
+                controller: widget.controller,
+                compact: compact,
+                onError: _error,
+              ),
             ),
             const SizedBox(height: 18),
             _SectionCard(
@@ -102,7 +127,8 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 18),
             _SectionCard(
               title: 'Category Management',
-              subtitle: 'Add warehouse categories or remove categories that are no longer used.',
+              subtitle:
+                  'Add warehouse categories or remove categories that are no longer used.',
               child: _categories(context, compact: compact),
             ),
             const SizedBox(height: 18),
@@ -133,9 +159,20 @@ class _SettingsPageState extends State<SettingsPage> {
                     initialValue: widget.controller.theme,
                     key: ValueKey(widget.controller.theme),
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Theme', prefixIcon: Icon(Icons.style_outlined)),
+                    decoration: const InputDecoration(
+                      labelText: 'Theme',
+                      prefixIcon: Icon(Icons.style_outlined),
+                    ),
                     items: SmartStockTheme.values
-                        .map((theme) => DropdownMenuItem(value: theme, child: Text(theme.label, overflow: TextOverflow.ellipsis)))
+                        .map(
+                          (theme) => DropdownMenuItem(
+                            value: theme,
+                            child: Text(
+                              theme.label,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) {
                       if (value != null) {
@@ -153,7 +190,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     subtitle: const Text('Use the dark SmartStock palette'),
                     value: widget.controller.theme == SmartStockTheme.dark,
                     onChanged: (enabled) {
-                      widget.controller.applyTheme(enabled ? SmartStockTheme.dark : SmartStockTheme.defaultLight);
+                      widget.controller.applyTheme(
+                        enabled
+                            ? SmartStockTheme.dark
+                            : SmartStockTheme.defaultLight,
+                      );
                       _hex.clear();
                     },
                   ),
@@ -171,7 +212,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   child: TextField(
                     controller: _hex,
                     textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(labelText: 'Accent Hex', hintText: '#2563EB', prefixIcon: Icon(Icons.tag)),
+                    decoration: const InputDecoration(
+                      labelText: 'Accent Hex',
+                      hintText: '#2563EB',
+                      prefixIcon: Icon(Icons.tag),
+                    ),
                     onSubmitted: (value) {
                       final color = _parseHex(value);
                       if (color == null) {
@@ -185,10 +230,18 @@ class _SettingsPageState extends State<SettingsPage> {
                 if (oneColumn)
                   SizedBox(
                     width: box.maxWidth,
-                    child: FilledButton.tonalIcon(onPressed: _pickAccent, icon: const Icon(Icons.palette_outlined), label: const Text('Pick Accent Color')),
+                    child: FilledButton.tonalIcon(
+                      onPressed: _pickAccent,
+                      icon: const Icon(Icons.palette_outlined),
+                      label: const Text('Pick Accent Color'),
+                    ),
                   )
                 else
-                  FilledButton.tonalIcon(onPressed: _pickAccent, icon: const Icon(Icons.palette_outlined), label: const Text('Pick Accent Color')),
+                  FilledButton.tonalIcon(
+                    onPressed: _pickAccent,
+                    icon: const Icon(Icons.palette_outlined),
+                    label: const Text('Pick Accent Color'),
+                  ),
                 if (oneColumn)
                   SizedBox(
                     width: box.maxWidth,
@@ -214,9 +267,13 @@ class _SettingsPageState extends State<SettingsPage> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: widget.controller.customAccent ?? Theme.of(context).colorScheme.primary,
+                    color:
+                        widget.controller.customAccent ??
+                        Theme.of(context).colorScheme.primary,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
                   ),
                 ),
               ],
@@ -234,15 +291,37 @@ class _SettingsPageState extends State<SettingsPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (compact || box.maxWidth < 560) ...[
-              TextField(controller: _category, decoration: const InputDecoration(labelText: 'New Category', prefixIcon: Icon(Icons.category_outlined))),
+              TextField(
+                controller: _category,
+                decoration: const InputDecoration(
+                  labelText: 'New Category',
+                  prefixIcon: Icon(Icons.category_outlined),
+                ),
+              ),
               const SizedBox(height: 10),
-              FilledButton.tonalIcon(onPressed: _addCategory, icon: const Icon(Icons.add), label: const Text('Add Category')),
+              FilledButton.tonalIcon(
+                onPressed: _addCategory,
+                icon: const Icon(Icons.add),
+                label: const Text('Add Category'),
+              ),
             ] else
               Row(
                 children: [
-                  Expanded(child: TextField(controller: _category, decoration: const InputDecoration(labelText: 'New Category', prefixIcon: Icon(Icons.category_outlined)))),
+                  Expanded(
+                    child: TextField(
+                      controller: _category,
+                      decoration: const InputDecoration(
+                        labelText: 'New Category',
+                        prefixIcon: Icon(Icons.category_outlined),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  FilledButton.tonalIcon(onPressed: _addCategory, icon: const Icon(Icons.add), label: const Text('Add Category')),
+                  FilledButton.tonalIcon(
+                    onPressed: _addCategory,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Category'),
+                  ),
                 ],
               ),
             const SizedBox(height: 14),
@@ -252,16 +331,27 @@ class _SettingsPageState extends State<SettingsPage> {
               children: widget.controller.categories.map((cat) {
                 final selected = _selectedCategory == cat.name;
                 return ChoiceChip(
-                  label: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 190), child: Text(cat.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 190),
+                    child: Text(
+                      cat.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   selected: selected,
-                  onSelected: (_) => setState(() => _selectedCategory = selected ? null : cat.name),
+                  onSelected: (_) => setState(
+                    () => _selectedCategory = selected ? null : cat.name,
+                  ),
                 );
               }).toList(),
             ),
             const SizedBox(height: 12),
             if (compact)
               OutlinedButton.icon(
-                onPressed: _selectedCategory == null ? null : _removeSelectedCategory,
+                onPressed: _selectedCategory == null
+                    ? null
+                    : _removeSelectedCategory,
                 icon: const Icon(Icons.remove_circle_outline),
                 label: const Text('Remove Selected Category'),
               )
@@ -269,7 +359,9 @@ class _SettingsPageState extends State<SettingsPage> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: OutlinedButton.icon(
-                  onPressed: _selectedCategory == null ? null : _removeSelectedCategory,
+                  onPressed: _selectedCategory == null
+                      ? null
+                      : _removeSelectedCategory,
                   icon: const Icon(Icons.remove_circle_outline),
                   label: const Text('Remove Selected Category'),
                 ),
@@ -292,7 +384,11 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _removeSelectedCategory() async {
     final name = _selectedCategory;
     if (name == null) return;
-    final ok = await showSmartConfirm(context, message: "Remove category '$name'?", confirmLabel: 'Remove');
+    final ok = await showSmartConfirm(
+      context,
+      message: "Remove category '$name'?",
+      confirmLabel: 'Remove',
+    );
     if (!ok) return;
     try {
       await widget.controller.removeCategory(name);
@@ -307,9 +403,14 @@ class _SettingsPageState extends State<SettingsPage> {
     final message = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Danger Zone', style: TextStyle(fontWeight: FontWeight.bold, color: scheme.error)),
+        Text(
+          'Danger Zone',
+          style: TextStyle(fontWeight: FontWeight.bold, color: scheme.error),
+        ),
         const SizedBox(height: 3),
-        const Text('Reset All Data deletes all inventory items while preserving the category list.'),
+        const Text(
+          'Reset All Data deletes all inventory items while preserving the category list.',
+        ),
       ],
     );
 
@@ -325,14 +426,20 @@ class _SettingsPageState extends State<SettingsPage> {
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Icon(Icons.warning_amber_rounded, color: scheme.error),
-                    const SizedBox(width: 12),
-                    Expanded(child: message),
-                  ]),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: scheme.error),
+                      const SizedBox(width: 12),
+                      Expanded(child: message),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
-                    style: FilledButton.styleFrom(backgroundColor: scheme.error, foregroundColor: scheme.onError),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: scheme.error,
+                      foregroundColor: scheme.onError,
+                    ),
                     onPressed: _resetInventory,
                     icon: const Icon(Icons.delete_forever),
                     label: const Text('Reset All Data'),
@@ -346,7 +453,10 @@ class _SettingsPageState extends State<SettingsPage> {
                   Expanded(child: message),
                   const SizedBox(width: 16),
                   FilledButton.icon(
-                    style: FilledButton.styleFrom(backgroundColor: scheme.error, foregroundColor: scheme.onError),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: scheme.error,
+                      foregroundColor: scheme.onError,
+                    ),
                     onPressed: _resetInventory,
                     icon: const Icon(Icons.delete_forever),
                     label: const Text('Reset All Data'),
@@ -359,7 +469,11 @@ class _SettingsPageState extends State<SettingsPage> {
 }
 
 class _DataActions extends StatelessWidget {
-  const _DataActions({required this.controller, required this.compact, required this.onError});
+  const _DataActions({
+    required this.controller,
+    required this.compact,
+    required this.onError,
+  });
   final SmartStockController controller;
   final bool compact;
   final ValueChanged<Object> onError;
@@ -383,7 +497,8 @@ class _DataActions extends StatelessWidget {
           context,
           destructive: false,
           title: 'Import Legacy Database',
-          message: 'Choose a plaintext SmartStock .db backup from the PyQt version. The current Flutter database will be replaced.',
+          message:
+              'Choose a plaintext SmartStock .db backup from the PyQt version. The current Flutter database will be replaced.',
           confirmLabel: 'Choose Database',
         );
         if (!ok) return;
@@ -423,45 +538,54 @@ class _EncryptionNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Icon(Icons.lock_outline, size: 18),
-            Text('Encrypted at rest after clean shutdown'),
-          ],
-        ),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: const Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Icon(Icons.lock_outline, size: 18),
+        Text('Encrypted at rest after clean shutdown'),
+      ],
+    ),
+  );
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.subtitle, required this.child});
+  const _SectionCard({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
   final String title;
   final String subtitle;
   final Widget child;
 
   @override
   Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 3),
-              Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 16),
-              child,
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
-        ),
-      );
+          const SizedBox(height: 3),
+          Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 16),
+          child,
+        ],
+      ),
+    ),
+  );
 }
 
 class _RgbPicker extends StatefulWidget {
@@ -481,27 +605,40 @@ class _RgbPickerState extends State<_RgbPicker> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Pick Accent Color'),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(height: 70, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12))),
-              const SizedBox(height: 12),
-              _slider('Red', r, (v) => setState(() => r = v)),
-              _slider('Green', g, (v) => setState(() => g = v)),
-              _slider('Blue', b, (v) => setState(() => b = v)),
-            ],
+    title: const Text('Pick Accent Color'),
+    content: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 420),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 70,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, color), child: const Text('Apply')),
+          const SizedBox(height: 12),
+          _slider('Red', r, (v) => setState(() => r = v)),
+          _slider('Green', g, (v) => setState(() => g = v)),
+          _slider('Blue', b, (v) => setState(() => b = v)),
         ],
-      );
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, color),
+        child: const Text('Apply'),
+      ),
+    ],
+  );
 
-  Widget _slider(String label, double value, ValueChanged<double> onChanged) => Column(
+  Widget _slider(String label, double value, ValueChanged<double> onChanged) =>
+      Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -511,7 +648,14 @@ class _RgbPickerState extends State<_RgbPicker> {
               Text('${value.round()}'),
             ],
           ),
-          Slider(value: value, min: 0, max: 255, divisions: 255, label: '${value.round()}', onChanged: onChanged),
+          Slider(
+            value: value,
+            min: 0,
+            max: 255,
+            divisions: 255,
+            label: '${value.round()}',
+            onChanged: onChanged,
+          ),
         ],
       );
 }

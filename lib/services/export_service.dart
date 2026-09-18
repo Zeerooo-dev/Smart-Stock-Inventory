@@ -20,11 +20,22 @@ class ExportService {
     return text;
   }
 
-  Future<Uri?> exportInventoryCsv({String fileName = 'inventory_report.csv'}) async {
+  Future<Uri?> exportInventoryCsv({
+    String fileName = 'inventory_report.csv',
+  }) async {
     final items = await database.getAllInventory();
     final rows = <List<Object?>>[
       ['ItemID', 'SKU', 'ItemName', 'Category', 'Quantity', 'UnitPrice'],
-      ...items.map((i) => [i.id, i.sku, _safeCsvCell(i.name), i.category, i.quantity, i.unitPrice]),
+      ...items.map(
+        (i) => [
+          i.id,
+          i.sku,
+          _safeCsvCell(i.name),
+          i.category,
+          i.quantity,
+          i.unitPrice,
+        ],
+      ),
     ];
     final data = utf8.encode(Csv().encode(rows));
     return FilePicker.saveFile(
@@ -45,12 +56,15 @@ class ExportService {
     if (file == null) return null;
     final bytes = await file.readAsBytes();
     final decoded = Csv().decode(utf8.decode(bytes));
-    if (decoded.isEmpty) throw const FormatException('CSV file is empty or has no headers.');
+    if (decoded.isEmpty)
+      throw const FormatException('CSV file is empty or has no headers.');
     final headers = decoded.first.map((e) => e.toString().trim()).toList();
     const required = {'ItemName', 'Category', 'Quantity', 'UnitPrice'};
     final missing = required.where((h) => !headers.contains(h)).toList();
     if (missing.isNotEmpty) {
-      throw FormatException('Missing required headers: ${missing.join(', ')}. Required: ItemName, Category, Quantity, UnitPrice.');
+      throw FormatException(
+        'Missing required headers: ${missing.join(', ')}. Required: ItemName, Category, Quantity, UnitPrice.',
+      );
     }
     final rows = <Map<String, String>>[];
     for (final record in decoded.skip(1)) {
@@ -67,8 +81,26 @@ class ExportService {
   Future<Uri?> exportAuditCsv(AuditFilter filter) async {
     final entries = await database.getAllAuditEntries(filter);
     final rows = <List<Object?>>[
-      ['Timestamp (UTC)', 'Item Name', 'SKU', 'Change Type', 'Delta Quantity', 'Price Snapshot', 'Running Balance'],
-      ...entries.map((e) => [e.timestamp, _safeCsvCell(e.itemName), e.sku, e.changeType, e.deltaQuantity, e.priceSnapshot, e.runningBalance]),
+      [
+        'Timestamp (UTC)',
+        'Item Name',
+        'SKU',
+        'Change Type',
+        'Delta Quantity',
+        'Price Snapshot',
+        'Running Balance',
+      ],
+      ...entries.map(
+        (e) => [
+          e.timestamp,
+          _safeCsvCell(e.itemName),
+          e.sku,
+          e.changeType,
+          e.deltaQuantity,
+          e.priceSnapshot,
+          e.runningBalance,
+        ],
+      ),
     ];
     final data = utf8.encode(Csv().encode(rows));
     return FilePicker.saveFile(
@@ -84,8 +116,22 @@ class ExportService {
     final entries = await database.getAllItemHistory(itemId);
     final safeName = itemName.replaceAll(RegExp(r'[^A-Za-z0-9 _-]'), '').trim();
     final rows = <List<Object?>>[
-      ['Timestamp (UTC)', 'Change Type', 'Delta Quantity', 'Price Snapshot', 'Running Balance'],
-      ...entries.map((e) => [e.timestamp, e.changeType, e.deltaQuantity, e.priceSnapshot, e.runningBalance]),
+      [
+        'Timestamp (UTC)',
+        'Change Type',
+        'Delta Quantity',
+        'Price Snapshot',
+        'Running Balance',
+      ],
+      ...entries.map(
+        (e) => [
+          e.timestamp,
+          e.changeType,
+          e.deltaQuantity,
+          e.priceSnapshot,
+          e.runningBalance,
+        ],
+      ),
     ];
     final data = utf8.encode(Csv().encode(rows));
     return FilePicker.saveFile(
@@ -107,28 +153,60 @@ class ExportService {
         margin: const pw.EdgeInsets.all(30),
         build: (context) => [
           pw.Text(
-            scheduled ? 'SmartStock — Scheduled Inventory Report' : 'SmartStock Inventory — Corporate Report',
-            style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('2563EB')),
+            scheduled
+                ? 'SmartStock — Scheduled Inventory Report'
+                : 'SmartStock Inventory — Corporate Report',
+            style: pw.TextStyle(
+              fontSize: 20,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColor.fromHex('2563EB'),
+            ),
           ),
           pw.SizedBox(height: 6),
-          pw.Text('Generated: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())}'),
+          pw.Text(
+            'Generated: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())}',
+          ),
           pw.SizedBox(height: 18),
           pw.TableHelper.fromTextArray(
-            headers: const ['ID', 'SKU', 'Item', 'Category', 'Qty', 'Unit Price', 'Value'],
-            data: [
-              ...items.map((i) => [
-                    '#${i.id.toString().padLeft(5, '0')}',
-                    i.sku,
-                    i.name,
-                    i.category,
-                    i.quantity.toString(),
-                    'PHP ${i.unitPrice.toStringAsFixed(2)}',
-                    'PHP ${i.value.toStringAsFixed(2)}',
-                  ]),
-              ['', '', '', 'TOTALS', '${kpis.totalQuantity}', '', 'PHP ${kpis.totalValue.toStringAsFixed(2)}'],
+            headers: const [
+              'ID',
+              'SKU',
+              'Item',
+              'Category',
+              'Qty',
+              'Unit Price',
+              'Value',
             ],
-            headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('2563EB')),
-            headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 8),
+            data: [
+              ...items.map(
+                (i) => [
+                  '#${i.id.toString().padLeft(5, '0')}',
+                  i.sku,
+                  i.name,
+                  i.category,
+                  i.quantity.toString(),
+                  'PHP ${i.unitPrice.toStringAsFixed(2)}',
+                  'PHP ${i.value.toStringAsFixed(2)}',
+                ],
+              ),
+              [
+                '',
+                '',
+                '',
+                'TOTALS',
+                '${kpis.totalQuantity}',
+                '',
+                'PHP ${kpis.totalValue.toStringAsFixed(2)}',
+              ],
+            ],
+            headerDecoration: pw.BoxDecoration(
+              color: PdfColor.fromHex('2563EB'),
+            ),
+            headerStyle: pw.TextStyle(
+              color: PdfColors.white,
+              fontWeight: pw.FontWeight.bold,
+              fontSize: 8,
+            ),
             cellStyle: const pw.TextStyle(fontSize: 7.5),
             cellAlignment: pw.Alignment.centerLeft,
             cellAlignments: {

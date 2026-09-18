@@ -10,7 +10,9 @@ class ReportsPage extends StatelessWidget {
   final SmartStockController controller;
 
   void _snack(BuildContext context, Object error) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(error.toString())));
   }
 
   @override
@@ -19,23 +21,44 @@ class ReportsPage extends StatelessWidget {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 600;
         final expanded = constraints.maxWidth >= 1100;
-        final padding = expanded ? 28.0 : compact ? 12.0 : 18.0;
-        final currency = NumberFormat.currency(locale: 'en_PH', symbol: '₱', decimalDigits: 0);
+        final padding = expanded
+            ? 28.0
+            : compact
+            ? 12.0
+            : 18.0;
+        final currency = NumberFormat.currency(
+          locale: 'en_PH',
+          symbol: '₱',
+          decimalDigits: 0,
+        );
 
         return RefreshIndicator(
           onRefresh: controller.refreshReports,
           child: ListView(
             padding: EdgeInsets.all(padding),
             children: [
-              Text('Inventory Analytics', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                'Inventory Analytics',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text('Live stock metrics, category balances, and operational risk signals.', style: Theme.of(context).textTheme.bodyMedium),
+              Text(
+                'Live stock metrics, category balances, and operational risk signals.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
               const SizedBox(height: 20),
               LayoutBuilder(
                 builder: (context, box) {
-                  final columns = compact ? 1 : expanded ? 3 : 2;
+                  final columns = compact
+                      ? 1
+                      : expanded
+                      ? 3
+                      : 2;
                   final spacing = 12.0;
-                  final cardWidth = (box.maxWidth - spacing * (columns - 1)) / columns;
+                  final cardWidth =
+                      (box.maxWidth - spacing * (columns - 1)) / columns;
                   return Wrap(
                     spacing: spacing,
                     runSpacing: spacing,
@@ -44,7 +67,9 @@ class ReportsPage extends StatelessWidget {
                         width: cardWidth,
                         child: _KpiCard(
                           label: 'Total Items in Stock',
-                          value: NumberFormat.decimalPattern().format(controller.kpis.totalQuantity),
+                          value: NumberFormat.decimalPattern().format(
+                            controller.kpis.totalQuantity,
+                          ),
                           icon: Icons.inventory_2_outlined,
                         ),
                       ),
@@ -75,20 +100,39 @@ class ReportsPage extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: _CategoryPieCard(summaries: controller.categorySummaries, compact: false)),
+                    Expanded(
+                      child: _CategoryPieCard(
+                        summaries: controller.categorySummaries,
+                        compact: false,
+                      ),
+                    ),
                     const SizedBox(width: 16),
-                    Expanded(child: _LowStockChartCard(threats: controller.lowStockThreats)),
+                    Expanded(
+                      child: _LowStockChartCard(
+                        threats: controller.lowStockThreats,
+                      ),
+                    ),
                   ],
                 )
               else ...[
-                _CategoryPieCard(summaries: controller.categorySummaries, compact: compact),
+                _CategoryPieCard(
+                  summaries: controller.categorySummaries,
+                  compact: compact,
+                ),
                 const SizedBox(height: 14),
                 _LowStockChartCard(threats: controller.lowStockThreats),
               ],
               const SizedBox(height: 20),
-              _CategorySummaryCard(summaries: controller.categorySummaries, compact: compact),
+              _CategorySummaryCard(
+                summaries: controller.categorySummaries,
+                compact: compact,
+              ),
               const SizedBox(height: 18),
-              _ExportActions(controller: controller, compact: compact, onError: (error) => _snack(context, error)),
+              _ExportActions(
+                controller: controller,
+                compact: compact,
+                onError: (error) => _snack(context, error),
+              ),
               const SizedBox(height: 30),
             ],
           ),
@@ -99,7 +143,11 @@ class ReportsPage extends StatelessWidget {
 }
 
 class _ExportActions extends StatelessWidget {
-  const _ExportActions({required this.controller, required this.compact, required this.onError});
+  const _ExportActions({
+    required this.controller,
+    required this.compact,
+    required this.onError,
+  });
   final SmartStockController controller;
   final bool compact;
   final ValueChanged<Object> onError;
@@ -144,12 +192,23 @@ class _ExportActions extends StatelessWidget {
       );
     }
 
-    return Wrap(alignment: WrapAlignment.end, spacing: 10, runSpacing: 10, children: buttons);
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 10,
+      runSpacing: 10,
+      children: buttons,
+    );
   }
 }
 
 class _KpiCard extends StatelessWidget {
-  const _KpiCard({required this.label, required this.value, required this.icon, this.alert = false, this.money = false});
+  const _KpiCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.alert = false,
+    this.money = false,
+  });
   final String label;
   final String value;
   final IconData icon;
@@ -159,7 +218,9 @@ class _KpiCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final valueColor = alert ? scheme.error : (money ? scheme.tertiary : scheme.primary);
+    final valueColor = alert
+        ? scheme.error
+        : (money ? scheme.tertiary : scheme.primary);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -168,7 +229,13 @@ class _KpiCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text(label, maxLines: 2, style: const TextStyle(fontWeight: FontWeight.w600))),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 2,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Icon(icon),
               ],
@@ -179,7 +246,10 @@ class _KpiCard extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Text(
                 value,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: valueColor),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: valueColor,
+                ),
               ),
             ),
           ],
@@ -211,7 +281,12 @@ class _CategoryPieCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Asset Value by Category', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'Asset Value by Category',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 12),
             SizedBox(
               height: compact ? 210 : 240,
@@ -225,13 +300,21 @@ class _CategoryPieCard extends StatelessWidget {
                           for (var i = 0; i < valid.length; i++)
                             PieChartSectionData(
                               value: valid[i].value,
-                              title: compact ? '' : _short(valid[i].category, 12),
+                              title: compact
+                                  ? ''
+                                  : _short(valid[i].category, 12),
                               radius: compact ? 62 : 72,
                               color: colors[i % colors.length],
                               titleStyle: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: ThemeData.estimateBrightnessForColor(colors[i % colors.length]) == Brightness.dark ? Colors.white : Colors.black,
+                                color:
+                                    ThemeData.estimateBrightnessForColor(
+                                          colors[i % colors.length],
+                                        ) ==
+                                        Brightness.dark
+                                    ? Colors.white
+                                    : Colors.black,
                               ),
                             ),
                         ],
@@ -245,7 +328,10 @@ class _CategoryPieCard extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   for (var i = 0; i < valid.length; i++)
-                    _LegendDot(color: colors[i % colors.length], label: valid[i].category),
+                    _LegendDot(
+                      color: colors[i % colors.length],
+                      label: valid[i].category,
+                    ),
                 ],
               ),
             ],
@@ -255,7 +341,8 @@ class _CategoryPieCard extends StatelessWidget {
     );
   }
 
-  static String _short(String value, int max) => value.length <= max ? value : '${value.substring(0, max)}…';
+  static String _short(String value, int max) =>
+      value.length <= max ? value : '${value.substring(0, max)}…';
 }
 
 class _LegendDot extends StatelessWidget {
@@ -265,18 +352,32 @@ class _LegendDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        constraints: const BoxConstraints(maxWidth: 220),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerLow, borderRadius: BorderRadius.circular(999)),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 9, height: 9, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-            const SizedBox(width: 5),
-            Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelSmall)),
-          ],
+    constraints: const BoxConstraints(maxWidth: 220),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-      );
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _LowStockChartCard extends StatelessWidget {
@@ -292,7 +393,13 @@ class _LowStockChartCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Low Stock Threats (Top 5)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: scheme.error)),
+            Text(
+              'Low Stock Threats (Top 5)',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: scheme.error,
+              ),
+            ),
             const SizedBox(height: 12),
             SizedBox(
               height: 240,
@@ -301,23 +408,45 @@ class _LowStockChartCard extends StatelessWidget {
                   : BarChart(
                       BarChartData(
                         rotationQuarterTurns: 1,
-                        maxY: threats.map((e) => e.ratio).fold<double>(1, (a, b) => b > a ? b : a) * 1.2,
+                        maxY:
+                            threats
+                                .map((e) => e.ratio)
+                                .fold<double>(1, (a, b) => b > a ? b : a) *
+                            1.2,
                         gridData: const FlGridData(show: true),
                         borderData: FlBorderData(show: false),
                         titlesData: FlTitlesData(
-                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 34)),
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          leftTitles: const AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 34,
+                            ),
+                          ),
                           bottomTitles: AxisTitles(
                             sideTitles: SideTitles(
                               showTitles: true,
                               reservedSize: 78,
                               getTitlesWidget: (value, meta) {
                                 final index = value.toInt();
-                                if (index < 0 || index >= threats.length) return const SizedBox.shrink();
+                                if (index < 0 || index >= threats.length)
+                                  return const SizedBox.shrink();
                                 final name = threats[index].name;
-                                final label = name.length > 14 ? '${name.substring(0, 14)}…' : name;
-                                return SideTitleWidget(meta: meta, child: Text(label, style: const TextStyle(fontSize: 9)));
+                                final label = name.length > 14
+                                    ? '${name.substring(0, 14)}…'
+                                    : name;
+                                return SideTitleWidget(
+                                  meta: meta,
+                                  child: Text(
+                                    label,
+                                    style: const TextStyle(fontSize: 9),
+                                  ),
+                                );
                               },
                             ),
                           ),
@@ -327,14 +456,22 @@ class _LowStockChartCard extends StatelessWidget {
                             BarChartGroupData(
                               x: i,
                               barRods: [
-                                BarChartRodData(toY: threats[i].ratio, color: scheme.error, width: 18, borderRadius: BorderRadius.circular(3)),
+                                BarChartRodData(
+                                  toY: threats[i].ratio,
+                                  color: scheme.error,
+                                  width: 18,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
                               ],
                             ),
                         ],
                       ),
                     ),
             ),
-            Text('Ratio = quantity ÷ reorder threshold', style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              'Ratio = quantity ÷ reorder threshold',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ],
         ),
       ),
@@ -356,10 +493,18 @@ class _CategorySummaryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Category Balance Summary', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'Category Balance Summary',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 12),
             if (summaries.isEmpty)
-              const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No inventory data.')))
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: Text('No inventory data.')),
+              )
             else if (compact)
               ...summaries.map(
                 (summary) => Padding(
@@ -376,9 +521,17 @@ class _CategorySummaryCard extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(summary.category, style: const TextStyle(fontWeight: FontWeight.w700)),
+                              Text(
+                                summary.category,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                               const SizedBox(height: 3),
-                              Text('${NumberFormat.decimalPattern().format(summary.quantity)} units', style: Theme.of(context).textTheme.bodySmall),
+                              Text(
+                                '${NumberFormat.decimalPattern().format(summary.quantity)} units',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
                             ],
                           ),
                         ),
@@ -409,7 +562,13 @@ class _CategorySummaryCard extends StatelessWidget {
                         (summary) => DataRow(
                           cells: [
                             DataCell(Text(summary.category)),
-                            DataCell(Text(NumberFormat.decimalPattern().format(summary.quantity))),
+                            DataCell(
+                              Text(
+                                NumberFormat.decimalPattern().format(
+                                  summary.quantity,
+                                ),
+                              ),
+                            ),
                             DataCell(Text(currency.format(summary.value))),
                           ],
                         ),

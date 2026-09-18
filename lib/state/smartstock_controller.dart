@@ -20,10 +20,10 @@ enum ScheduledFormat { csvOnly, pdfOnly, csvAndPdf }
 
 extension ScheduledFormatLabel on ScheduledFormat {
   String get label => switch (this) {
-        ScheduledFormat.csvOnly => 'CSV only',
-        ScheduledFormat.pdfOnly => 'PDF only',
-        ScheduledFormat.csvAndPdf => 'Both CSV and PDF',
-      };
+    ScheduledFormat.csvOnly => 'CSV only',
+    ScheduledFormat.pdfOnly => 'PDF only',
+    ScheduledFormat.csvAndPdf => 'Both CSV and PDF',
+  };
 }
 
 class SmartStockController extends ChangeNotifier {
@@ -70,7 +70,8 @@ class SmartStockController extends ChangeNotifier {
   String schedulerOutputDirectory = '';
 
   int get inventoryTotalPages {
-    final pages = (inventoryPage.total / DatabaseService.inventoryPageSize).ceil();
+    final pages = (inventoryPage.total / DatabaseService.inventoryPageSize)
+        .ceil();
     return pages < 1 ? 1 : pages;
   }
 
@@ -84,12 +85,18 @@ class SmartStockController extends ChangeNotifier {
     needsLegacyPassphrase = false;
     notifyListeners();
     try {
-      await database.initialize(sandbox: sandbox, legacyPassphrase: legacyPassphrase);
+      await database.initialize(
+        sandbox: sandbox,
+        legacyPassphrase: legacyPassphrase,
+      );
       await refreshAll();
       startupError = null;
-      statusMessage = sandbox ? 'Sandbox database loaded.' : 'SmartStock ready.';
+      statusMessage = sandbox
+          ? 'Sandbox database loaded.'
+          : 'SmartStock ready.';
     } catch (e) {
-      needsLegacyPassphrase = e is LegacyDatabaseKeyRequired || legacyPassphrase != null;
+      needsLegacyPassphrase =
+          e is LegacyDatabaseKeyRequired || legacyPassphrase != null;
       startupError = e.toString();
       statusMessage = 'Startup failed.';
     } finally {
@@ -128,13 +135,20 @@ class SmartStockController extends ChangeNotifier {
   }
 
   Future<void> refreshInventory({bool notify = true}) async {
-    inventoryPage = await database.getInventoryPage(search: inventorySearch, page: inventoryPageIndex);
+    inventoryPage = await database.getInventoryPage(
+      search: inventorySearch,
+      page: inventoryPageIndex,
+    );
     final totalPages = inventoryTotalPages;
     if (inventoryPageIndex >= totalPages) {
       inventoryPageIndex = totalPages - 1;
-      inventoryPage = await database.getInventoryPage(search: inventorySearch, page: inventoryPageIndex);
+      inventoryPage = await database.getInventoryPage(
+        search: inventorySearch,
+        page: inventoryPageIndex,
+      );
     }
-    if (selectedItem != null && !inventoryPage.items.any((i) => i.id == selectedItem!.id)) {
+    if (selectedItem != null &&
+        !inventoryPage.items.any((i) => i.id == selectedItem!.id)) {
       selectedItem = null;
     }
     if (notify) notifyListeners();
@@ -153,7 +167,9 @@ class SmartStockController extends ChangeNotifier {
   }
 
   Future<void> inventoryNext() async {
-    if ((inventoryPageIndex + 1) * DatabaseService.inventoryPageSize >= inventoryPage.total) return;
+    if ((inventoryPageIndex + 1) * DatabaseService.inventoryPageSize >=
+        inventoryPage.total)
+      return;
     inventoryPageIndex++;
     await refreshInventory();
   }
@@ -210,9 +226,18 @@ class SmartStockController extends ChangeNotifier {
     await _refreshAfterInventoryMutation();
   }
 
-  Future<void> adjustStock(InventoryItem item, int amount, {required bool restock}) async {
-    await database.adjustStock(itemId: item.id, amount: amount, restock: restock);
-    statusMessage = '${restock ? 'Restocked' : 'Dispensed'} $amount unit(s) for \'${item.name}\'.';
+  Future<void> adjustStock(
+    InventoryItem item,
+    int amount, {
+    required bool restock,
+  }) async {
+    await database.adjustStock(
+      itemId: item.id,
+      amount: amount,
+      restock: restock,
+    );
+    statusMessage =
+        '${restock ? 'Restocked' : 'Dispensed'} $amount unit(s) for \'${item.name}\'.';
     await _refreshAfterInventoryMutation();
   }
 
@@ -277,11 +302,17 @@ class SmartStockController extends ChangeNotifier {
 
   Future<void> refreshAudit({bool notify = true}) async {
     auditItemNames = await database.getAuditItemNames();
-    auditPage = await database.getAuditPage(filter: auditFilter, page: auditPageIndex);
+    auditPage = await database.getAuditPage(
+      filter: auditFilter,
+      page: auditPageIndex,
+    );
     final totalPages = auditTotalPages;
     if (auditPageIndex >= totalPages) {
       auditPageIndex = totalPages - 1;
-      auditPage = await database.getAuditPage(filter: auditFilter, page: auditPageIndex);
+      auditPage = await database.getAuditPage(
+        filter: auditFilter,
+        page: auditPageIndex,
+      );
     }
     if (notify) notifyListeners();
   }
@@ -310,7 +341,8 @@ class SmartStockController extends ChangeNotifier {
   }
 
   Future<void> auditNext() async {
-    if ((auditPageIndex + 1) * DatabaseService.auditPageSize >= auditPage.total) return;
+    if ((auditPageIndex + 1) * DatabaseService.auditPageSize >= auditPage.total)
+      return;
     auditPageIndex++;
     await refreshAudit();
   }
@@ -343,7 +375,8 @@ class SmartStockController extends ChangeNotifier {
 
   Future<void> refreshSuppliers({bool notify = true}) async {
     suppliers = await database.getSuppliers();
-    if (selectedSupplier != null && !suppliers.any((s) => s.id == selectedSupplier!.id)) {
+    if (selectedSupplier != null &&
+        !suppliers.any((s) => s.id == selectedSupplier!.id)) {
       selectedSupplier = null;
     }
     if (notify) notifyListeners();
@@ -354,8 +387,20 @@ class SmartStockController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> saveSupplier({int? id, required String name, String email = '', String phone = '', String notes = ''}) async {
-    await database.saveSupplier(id: id, name: name, email: email, phone: phone, notes: notes);
+  Future<void> saveSupplier({
+    int? id,
+    required String name,
+    String email = '',
+    String phone = '',
+    String notes = '',
+  }) async {
+    await database.saveSupplier(
+      id: id,
+      name: name,
+      email: email,
+      phone: phone,
+      notes: notes,
+    );
     statusMessage = "Supplier '$name' ${id == null ? 'added' : 'updated'}.";
     selectedSupplier = null;
     await refreshSuppliers();
@@ -389,7 +434,9 @@ class SmartStockController extends ChangeNotifier {
 
   void setAccent(Color? color) {
     customAccent = color;
-    statusMessage = color == null ? 'Custom accent reset.' : 'Custom accent applied.';
+    statusMessage = color == null
+        ? 'Custom accent reset.'
+        : 'Custom accent applied.';
     notifyListeners();
   }
 
@@ -414,12 +461,15 @@ class SmartStockController extends ChangeNotifier {
 
   Future<void> resetInventory() async {
     await database.resetInventory();
-    statusMessage = 'All inventory items were cleared. Categories were preserved.';
+    statusMessage =
+        'All inventory items were cleared. Categories were preserved.';
     await _refreshAfterInventoryMutation();
   }
 
   Future<String?> chooseSchedulerDirectory() async {
-    final path = await FilePicker.getDirectoryPath(dialogTitle: 'Choose scheduled report folder');
+    final path = await FilePicker.getDirectoryPath(
+      dialogTitle: 'Choose scheduled report folder',
+    );
     if (path != null) {
       schedulerOutputDirectory = path;
       notifyListeners();
@@ -427,15 +477,24 @@ class SmartStockController extends ChangeNotifier {
     return path;
   }
 
-  void startScheduler({required int minutes, required ScheduledFormat format, required String directory}) {
-    if (minutes < 5) throw ArgumentError('Interval must be at least 5 minutes.');
-    if (directory.trim().isEmpty) throw ArgumentError('Choose an output folder first.');
+  void startScheduler({
+    required int minutes,
+    required ScheduledFormat format,
+    required String directory,
+  }) {
+    if (minutes < 5)
+      throw ArgumentError('Interval must be at least 5 minutes.');
+    if (directory.trim().isEmpty)
+      throw ArgumentError('Choose an output folder first.');
     _scheduler?.cancel();
     schedulerIntervalMinutes = minutes;
     schedulerFormat = format;
     schedulerOutputDirectory = directory.trim();
     schedulerRunning = true;
-    _scheduler = Timer.periodic(Duration(minutes: minutes), (_) => unawaited(_schedulerFire()));
+    _scheduler = Timer.periodic(
+      Duration(minutes: minutes),
+      (_) => unawaited(_schedulerFire()),
+    );
     statusMessage = 'Scheduler started: ${format.label} every $minutes min.';
     notifyListeners();
   }
@@ -452,18 +511,30 @@ class SmartStockController extends ChangeNotifier {
     final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     var wroteAny = false;
     try {
-      if (schedulerFormat == ScheduledFormat.csvOnly || schedulerFormat == ScheduledFormat.csvAndPdf) {
+      if (schedulerFormat == ScheduledFormat.csvOnly ||
+          schedulerFormat == ScheduledFormat.csvAndPdf) {
         final items = await database.getAllInventory();
         final rows = <List<Object?>>[
           ['ItemID', 'SKU', 'ItemName', 'Category', 'Quantity', 'UnitPrice'],
-          ...items.map((i) => [i.id, i.sku, i.name, i.category, i.quantity, i.unitPrice]),
+          ...items.map(
+            (i) => [i.id, i.sku, i.name, i.category, i.quantity, i.unitPrice],
+          ),
         ];
         final bytes = Uint8List.fromList(utf8.encode(Csv().encode(rows)));
-        wroteAny |= await writeScheduledFile(schedulerOutputDirectory, 'inventory_$stamp.csv', bytes);
+        wroteAny |= await writeScheduledFile(
+          schedulerOutputDirectory,
+          'inventory_$stamp.csv',
+          bytes,
+        );
       }
-      if (schedulerFormat == ScheduledFormat.pdfOnly || schedulerFormat == ScheduledFormat.csvAndPdf) {
+      if (schedulerFormat == ScheduledFormat.pdfOnly ||
+          schedulerFormat == ScheduledFormat.csvAndPdf) {
         final bytes = await exports.buildInventoryPdf(scheduled: true);
-        wroteAny |= await writeScheduledFile(schedulerOutputDirectory, 'report_$stamp.pdf', bytes);
+        wroteAny |= await writeScheduledFile(
+          schedulerOutputDirectory,
+          'report_$stamp.pdf',
+          bytes,
+        );
       }
       statusMessage = wroteAny
           ? 'Scheduled report generated: $stamp'

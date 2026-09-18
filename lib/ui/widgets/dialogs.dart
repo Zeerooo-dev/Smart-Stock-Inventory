@@ -22,11 +22,22 @@ Future<bool> showSmartConfirm(
         children: [
           Icon(
             destructive ? Icons.warning_amber_rounded : Icons.help_outline,
-            color: destructive ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.primary,
+            color: destructive
+                ? Theme.of(context).colorScheme.error
+                : Theme.of(context).colorScheme.primary,
           ),
           const SizedBox(width: 10),
-          Expanded(child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
-          IconButton(onPressed: () => Navigator.pop(context, false), icon: const Icon(Icons.close), tooltip: 'Close'),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ),
+          IconButton(
+            onPressed: () => Navigator.pop(context, false),
+            icon: const Icon(Icons.close),
+            tooltip: 'Close',
+          ),
         ],
       ),
       content: Column(
@@ -37,25 +48,40 @@ Future<bool> showSmartConfirm(
             height: 64,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: destructive ? Theme.of(context).colorScheme.errorContainer : Theme.of(context).colorScheme.primaryContainer,
+              color: destructive
+                  ? Theme.of(context).colorScheme.errorContainer
+                  : Theme.of(context).colorScheme.primaryContainer,
             ),
-            child: Icon(destructive ? Icons.delete_outline : Icons.info_outline, size: 30),
+            child: Icon(
+              destructive ? Icons.delete_outline : Icons.info_outline,
+              size: 30,
+            ),
           ),
           const SizedBox(height: 16),
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 8),
           Text(
-            destructive ? 'This action cannot be undone.' : 'Please confirm to continue.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            destructive
+                ? 'This action cannot be undone.'
+                : 'Please confirm to continue.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
       ),
       actions: [
-        OutlinedButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        OutlinedButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           style: destructive
-              ? FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Theme.of(context).colorScheme.onError)
+              ? FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
+                )
               : null,
           onPressed: () => Navigator.pop(context, true),
           child: Text(confirmLabel),
@@ -66,7 +92,10 @@ Future<bool> showSmartConfirm(
   return result ?? false;
 }
 
-Future<int?> showStockAmountDialog(BuildContext context, {required bool restock}) async {
+Future<int?> showStockAmountDialog(
+  BuildContext context, {
+  required bool restock,
+}) async {
   final controller = TextEditingController(text: '1');
   return showDialog<int>(
     context: context,
@@ -77,14 +106,19 @@ Future<int?> showStockAmountDialog(BuildContext context, {required bool restock}
         controller: controller,
         autofocus: true,
         keyboardType: TextInputType.number,
-        decoration: InputDecoration(labelText: restock ? 'Restock quantity' : 'Dispense quantity'),
+        decoration: InputDecoration(
+          labelText: restock ? 'Restock quantity' : 'Dispense quantity',
+        ),
         onSubmitted: (_) {
           final value = int.tryParse(controller.text);
           if (value != null && value > 0) Navigator.pop(context, value);
         },
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: () {
             final value = int.tryParse(controller.text);
@@ -104,7 +138,8 @@ Future<void> showItemHistoryDialog(
 ) async {
   await showDialog<void>(
     context: context,
-    builder: (context) => _ItemHistoryDialog(controller: controller, item: item),
+    builder: (context) =>
+        _ItemHistoryDialog(controller: controller, item: item),
   );
 }
 
@@ -121,7 +156,8 @@ class _ItemHistoryDialogState extends State<_ItemHistoryDialog> {
   int page = 0;
   late Future<ItemHistorySnapshot> future = _load();
 
-  Future<ItemHistorySnapshot> _load() => widget.controller.database.getItemHistory(widget.item.id, page: page);
+  Future<ItemHistorySnapshot> _load() =>
+      widget.controller.database.getItemHistory(widget.item.id, page: page);
 
   void _changePage(int delta) {
     setState(() {
@@ -134,7 +170,9 @@ class _ItemHistoryDialogState extends State<_ItemHistoryDialog> {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final compact = size.width < 600;
-    final dialogHeight = compact ? size.height - 24 : (size.height < 730 ? size.height - 36 : 680.0);
+    final dialogHeight = compact
+        ? size.height - 24
+        : (size.height < 730 ? size.height - 36 : 680.0);
 
     return Dialog(
       insetPadding: EdgeInsets.all(compact ? 12 : 24),
@@ -148,12 +186,16 @@ class _ItemHistoryDialogState extends State<_ItemHistoryDialog> {
             future: future,
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
-                if (snapshot.hasError) return Center(child: Text('Could not load history: ${snapshot.error}'));
+                if (snapshot.hasError)
+                  return Center(
+                    child: Text('Could not load history: ${snapshot.error}'),
+                  );
                 return const Center(child: CircularProgressIndicator());
               }
 
               final data = snapshot.data!;
-              final pages = (data.totalEntries / DatabaseService.historyPageSize).ceil();
+              final pages =
+                  (data.totalEntries / DatabaseService.historyPageSize).ceil();
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -164,14 +206,29 @@ class _ItemHistoryDialogState extends State<_ItemHistoryDialog> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Item History', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                            Text(
+                              'Item History',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
                             const SizedBox(height: 2),
-                            Text(widget.item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall),
-                            Text(widget.item.sku, style: Theme.of(context).textTheme.bodySmall),
+                            Text(
+                              widget.item.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            Text(
+                              widget.item.sku,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                           ],
                         ),
                       ),
-                      IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -179,15 +236,40 @@ class _ItemHistoryDialogState extends State<_ItemHistoryDialog> {
                     builder: (context, box) {
                       final columns = compact ? 2 : 4;
                       final spacing = 8.0;
-                      final width = (box.maxWidth - spacing * (columns - 1)) / columns;
+                      final width =
+                          (box.maxWidth - spacing * (columns - 1)) / columns;
                       return Wrap(
                         spacing: spacing,
                         runSpacing: spacing,
                         children: [
-                          SizedBox(width: width, child: _MiniMetric(label: 'Current stock', value: '${data.currentQuantity}')),
-                          SizedBox(width: width, child: _MiniMetric(label: 'Total added', value: '+${data.totalAdded}')),
-                          SizedBox(width: width, child: _MiniMetric(label: 'Total removed', value: '-${data.totalRemoved}')),
-                          SizedBox(width: width, child: _MiniMetric(label: 'Entries', value: '${data.totalEntries}')),
+                          SizedBox(
+                            width: width,
+                            child: _MiniMetric(
+                              label: 'Current stock',
+                              value: '${data.currentQuantity}',
+                            ),
+                          ),
+                          SizedBox(
+                            width: width,
+                            child: _MiniMetric(
+                              label: 'Total added',
+                              value: '+${data.totalAdded}',
+                            ),
+                          ),
+                          SizedBox(
+                            width: width,
+                            child: _MiniMetric(
+                              label: 'Total removed',
+                              value: '-${data.totalRemoved}',
+                            ),
+                          ),
+                          SizedBox(
+                            width: width,
+                            child: _MiniMetric(
+                              label: 'Entries',
+                              value: '${data.totalEntries}',
+                            ),
+                          ),
                         ],
                       );
                     },
@@ -197,23 +279,32 @@ class _ItemHistoryDialogState extends State<_ItemHistoryDialog> {
                     child: data.entries.isEmpty
                         ? const Center(child: Text('No history entries.'))
                         : compact
-                            ? _HistoryCards(entries: data.entries)
-                            : _HistoryTable(entries: data.entries),
+                        ? _HistoryCards(entries: data.entries)
+                        : _HistoryTable(entries: data.entries),
                   ),
                   const SizedBox(height: 10),
                   if (compact)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('Page ${page + 1} of ${pages < 1 ? 1 : pages} · ${data.totalEntries} entries', textAlign: TextAlign.center),
+                        Text(
+                          'Page ${page + 1} of ${pages < 1 ? 1 : pages} · ${data.totalEntries} entries',
+                          textAlign: TextAlign.center,
+                        ),
                         const SizedBox(height: 8),
-                        OutlinedButton.icon(onPressed: _exportHistory, icon: const Icon(Icons.download), label: const Text('Export CSV')),
+                        OutlinedButton.icon(
+                          onPressed: _exportHistory,
+                          icon: const Icon(Icons.download),
+                          label: const Text('Export CSV'),
+                        ),
                         const SizedBox(height: 8),
                         Row(
                           children: [
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: page > 0 ? () => _changePage(-1) : null,
+                                onPressed: page > 0
+                                    ? () => _changePage(-1)
+                                    : null,
                                 icon: const Icon(Icons.chevron_left),
                                 label: const Text('Previous'),
                               ),
@@ -221,7 +312,12 @@ class _ItemHistoryDialogState extends State<_ItemHistoryDialog> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: FilledButton.tonalIcon(
-                                onPressed: (page + 1) * DatabaseService.historyPageSize < data.totalEntries ? () => _changePage(1) : null,
+                                onPressed:
+                                    (page + 1) *
+                                            DatabaseService.historyPageSize <
+                                        data.totalEntries
+                                    ? () => _changePage(1)
+                                    : null,
                                 icon: const Icon(Icons.chevron_right),
                                 label: const Text('Next'),
                               ),
@@ -233,13 +329,26 @@ class _ItemHistoryDialogState extends State<_ItemHistoryDialog> {
                   else
                     Row(
                       children: [
-                        Text('Page ${page + 1} of ${pages < 1 ? 1 : pages} (${data.totalEntries} entries)'),
+                        Text(
+                          'Page ${page + 1} of ${pages < 1 ? 1 : pages} (${data.totalEntries} entries)',
+                        ),
                         const Spacer(),
-                        OutlinedButton.icon(onPressed: _exportHistory, icon: const Icon(Icons.download), label: const Text('Export CSV')),
+                        OutlinedButton.icon(
+                          onPressed: _exportHistory,
+                          icon: const Icon(Icons.download),
+                          label: const Text('Export CSV'),
+                        ),
                         const SizedBox(width: 8),
-                        IconButton(onPressed: page > 0 ? () => _changePage(-1) : null, icon: const Icon(Icons.chevron_left)),
                         IconButton(
-                          onPressed: (page + 1) * DatabaseService.historyPageSize < data.totalEntries ? () => _changePage(1) : null,
+                          onPressed: page > 0 ? () => _changePage(-1) : null,
+                          icon: const Icon(Icons.chevron_left),
+                        ),
+                        IconButton(
+                          onPressed:
+                              (page + 1) * DatabaseService.historyPageSize <
+                                  data.totalEntries
+                              ? () => _changePage(1)
+                              : null,
                           icon: const Icon(Icons.chevron_right),
                         ),
                       ],
@@ -257,7 +366,10 @@ class _ItemHistoryDialogState extends State<_ItemHistoryDialog> {
     try {
       await widget.controller.exportItemHistory(widget.item);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 }
@@ -269,24 +381,34 @@ class _MiniMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(12),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodySmall,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-            ),
-          ],
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 class _HistoryTable extends StatelessWidget {
@@ -295,32 +417,36 @@ class _HistoryTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SingleChildScrollView(
-          child: DataTable(
-            columns: const [
-              DataColumn(label: Text('Timestamp')),
-              DataColumn(label: Text('Change Type')),
-              DataColumn(label: Text('Δ Qty'), numeric: true),
-              DataColumn(label: Text('Price'), numeric: true),
-              DataColumn(label: Text('Running Balance'), numeric: true),
-            ],
-            rows: entries
-                .map(
-                  (entry) => DataRow(
-                    cells: [
-                      DataCell(Text(entry.timestamp)),
-                      DataCell(Text(_friendlyType(entry.changeType))),
-                      DataCell(Text('${entry.deltaQuantity >= 0 ? '+' : ''}${entry.deltaQuantity}')),
-                      DataCell(Text('₱${entry.priceSnapshot.toStringAsFixed(2)}')),
-                      DataCell(Text('${entry.runningBalance}')),
-                    ],
+    scrollDirection: Axis.horizontal,
+    child: SingleChildScrollView(
+      child: DataTable(
+        columns: const [
+          DataColumn(label: Text('Timestamp')),
+          DataColumn(label: Text('Change Type')),
+          DataColumn(label: Text('Δ Qty'), numeric: true),
+          DataColumn(label: Text('Price'), numeric: true),
+          DataColumn(label: Text('Running Balance'), numeric: true),
+        ],
+        rows: entries
+            .map(
+              (entry) => DataRow(
+                cells: [
+                  DataCell(Text(entry.timestamp)),
+                  DataCell(Text(_friendlyType(entry.changeType))),
+                  DataCell(
+                    Text(
+                      '${entry.deltaQuantity >= 0 ? '+' : ''}${entry.deltaQuantity}',
+                    ),
                   ),
-                )
-                .toList(),
-          ),
-        ),
-      );
+                  DataCell(Text('₱${entry.priceSnapshot.toStringAsFixed(2)}')),
+                  DataCell(Text('${entry.runningBalance}')),
+                ],
+              ),
+            )
+            .toList(),
+      ),
+    ),
+  );
 }
 
 class _HistoryCards extends StatelessWidget {
@@ -329,55 +455,66 @@ class _HistoryCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView.separated(
-        itemCount: entries.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          final entry = entries[index];
-          return Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    itemCount: entries.length,
+    separatorBuilder: (_, _) => const SizedBox(height: 8),
+    itemBuilder: (context, index) {
+      final entry = entries[index];
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(child: Text(_friendlyType(entry.changeType), style: const TextStyle(fontWeight: FontWeight.w700))),
-                    const SizedBox(width: 8),
-                    Text('${entry.deltaQuantity >= 0 ? '+' : ''}${entry.deltaQuantity}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                  ],
+                Expanded(
+                  child: Text(
+                    _friendlyType(entry.changeType),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ),
-                const SizedBox(height: 5),
-                Text(entry.timestamp, style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    Text('Price ₱${entry.priceSnapshot.toStringAsFixed(2)}'),
-                    Text('Balance ${entry.runningBalance}'),
-                  ],
+                const SizedBox(width: 8),
+                Text(
+                  '${entry.deltaQuantity >= 0 ? '+' : ''}${entry.deltaQuantity}',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ],
             ),
-          );
-        },
+            const SizedBox(height: 5),
+            Text(entry.timestamp, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                Text('Price ₱${entry.priceSnapshot.toStringAsFixed(2)}'),
+                Text('Balance ${entry.runningBalance}'),
+              ],
+            ),
+          ],
+        ),
       );
+    },
+  );
 }
 
 String _friendlyType(String type) => switch (type) {
-      'CREATE' => 'Created',
-      'MANUAL_EDIT' => 'Manual edit',
-      'CSV_IMPORT' => 'CSV import',
-      'RESTOCK' => 'Restock',
-      'DISPENSE' => 'Dispense',
-      'ROLLBACK_REVERSAL' => 'Rollback reversal',
-      _ => type,
-    };
+  'CREATE' => 'Created',
+  'MANUAL_EDIT' => 'Manual edit',
+  'CSV_IMPORT' => 'CSV import',
+  'RESTOCK' => 'Restock',
+  'DISPENSE' => 'Dispense',
+  'ROLLBACK_REVERSAL' => 'Rollback reversal',
+  _ => type,
+};
 
-Future<void> showSchedulerDialog(BuildContext context, SmartStockController controller) async {
+Future<void> showSchedulerDialog(
+  BuildContext context,
+  SmartStockController controller,
+) async {
   var minutes = controller.schedulerIntervalMinutes;
   var format = controller.schedulerFormat;
   var directory = controller.schedulerOutputDirectory;
@@ -397,18 +534,34 @@ Future<void> showSchedulerDialog(BuildContext context, SmartStockController cont
                 TextFormField(
                   initialValue: '$minutes',
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Interval (minutes)', prefixIcon: Icon(Icons.timer_outlined)),
-                  onChanged: (value) => minutes = int.tryParse(value) ?? minutes,
+                  decoration: const InputDecoration(
+                    labelText: 'Interval (minutes)',
+                    prefixIcon: Icon(Icons.timer_outlined),
+                  ),
+                  onChanged: (value) =>
+                      minutes = int.tryParse(value) ?? minutes,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<ScheduledFormat>(
                   initialValue: format,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Report format', prefixIcon: Icon(Icons.description_outlined)),
+                  decoration: const InputDecoration(
+                    labelText: 'Report format',
+                    prefixIcon: Icon(Icons.description_outlined),
+                  ),
                   items: ScheduledFormat.values
-                      .map((value) => DropdownMenuItem(value: value, child: Text(value.label, overflow: TextOverflow.ellipsis)))
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text(
+                            value.label,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
                       .toList(),
-                  onChanged: (value) => setState(() => format = value ?? format),
+                  onChanged: (value) =>
+                      setState(() => format = value ?? format),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -422,11 +575,19 @@ Future<void> showSchedulerDialog(BuildContext context, SmartStockController cont
                       icon: const Icon(Icons.folder_open),
                       onPressed: () async {
                         try {
-                          final picked = await controller.chooseSchedulerDirectory();
-                          if (picked != null) setState(() => directory = picked);
+                          final picked = await controller
+                              .chooseSchedulerDirectory();
+                          if (picked != null)
+                            setState(() => directory = picked);
                         } catch (e) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Folder selection unavailable: $e')));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Folder selection unavailable: $e',
+                                ),
+                              ),
+                            );
                           }
                         }
                       },
@@ -456,16 +617,25 @@ Future<void> showSchedulerDialog(BuildContext context, SmartStockController cont
               },
               child: const Text('Stop'),
             ),
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
           FilledButton(
             onPressed: controller.schedulerRunning
                 ? null
                 : () {
                     try {
-                      controller.startScheduler(minutes: minutes, format: format, directory: directory);
+                      controller.startScheduler(
+                        minutes: minutes,
+                        format: format,
+                        directory: directory,
+                      );
                       Navigator.pop(context);
                     } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('$e')));
                     }
                   },
             child: const Text('Start'),
@@ -476,4 +646,5 @@ Future<void> showSchedulerDialog(BuildContext context, SmartStockController cont
   );
 }
 
-String formatAuditDate(DateTime value) => DateFormat('yyyy-MM-dd').format(value);
+String formatAuditDate(DateTime value) =>
+    DateFormat('yyyy-MM-dd').format(value);

@@ -14,7 +14,10 @@ Future<DatabaseFactory> createFactory() async {
   return native.databaseFactory;
 }
 
-Future<String> databasePath(DatabaseFactory factory, {required bool sandbox}) async {
+Future<String> databasePath(
+  DatabaseFactory factory, {
+  required bool sandbox,
+}) async {
   final dir = await getApplicationSupportDirectory();
   final smartStockDir = Directory(p.join(dir.path, 'SmartStock'));
   if (!await smartStockDir.exists()) {

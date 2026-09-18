@@ -4,9 +4,9 @@ class CategoryRecord {
   final String name;
 
   factory CategoryRecord.fromMap(Map<String, Object?> m) => CategoryRecord(
-        id: (m['CategoryID'] as num).toInt(),
-        name: (m['CategoryName'] ?? '').toString(),
-      );
+    id: (m['CategoryID'] as num).toInt(),
+    name: (m['CategoryName'] ?? '').toString(),
+  );
 }
 
 class InventoryItem {
@@ -32,14 +32,14 @@ class InventoryItem {
   double get value => quantity * unitPrice;
 
   factory InventoryItem.fromMap(Map<String, Object?> m) => InventoryItem(
-        id: (m['ItemID'] as num).toInt(),
-        sku: (m['SKU'] ?? '').toString(),
-        name: (m['ItemName'] ?? '').toString(),
-        category: (m['CategoryName'] ?? '').toString(),
-        quantity: ((m['Quantity'] ?? 0) as num).toInt(),
-        unitPrice: ((m['UnitPrice'] ?? 0) as num).toDouble(),
-        reorderLevel: ((m['ReorderLevel'] ?? 5) as num).toInt(),
-      );
+    id: (m['ItemID'] as num).toInt(),
+    sku: (m['SKU'] ?? '').toString(),
+    name: (m['ItemName'] ?? '').toString(),
+    category: (m['CategoryName'] ?? '').toString(),
+    quantity: ((m['Quantity'] ?? 0) as num).toInt(),
+    unitPrice: ((m['UnitPrice'] ?? 0) as num).toDouble(),
+    reorderLevel: ((m['ReorderLevel'] ?? 5) as num).toInt(),
+  );
 }
 
 class InventoryPage {
@@ -58,11 +58,19 @@ class KpiSnapshot {
   final int lowStockCount;
   final double totalValue;
 
-  static const empty = KpiSnapshot(totalQuantity: 0, lowStockCount: 0, totalValue: 0);
+  static const empty = KpiSnapshot(
+    totalQuantity: 0,
+    lowStockCount: 0,
+    totalValue: 0,
+  );
 }
 
 class CategorySummary {
-  const CategorySummary({required this.category, required this.quantity, required this.value});
+  const CategorySummary({
+    required this.category,
+    required this.quantity,
+    required this.value,
+  });
   final String category;
   final int quantity;
   final double value;
@@ -102,15 +110,15 @@ class LedgerEntry {
   final int runningBalance;
 
   factory LedgerEntry.fromMap(Map<String, Object?> m) => LedgerEntry(
-        ledgerId: ((m['LedgerID'] ?? 0) as num).toInt(),
-        timestamp: (m['Timestamp'] ?? '').toString(),
-        itemName: (m['ItemName'] ?? '[Deleted Item]').toString(),
-        sku: (m['SKU'] ?? '—').toString(),
-        changeType: (m['ChangeType'] ?? '').toString(),
-        deltaQuantity: ((m['DeltaQuantity'] ?? 0) as num).toInt(),
-        priceSnapshot: ((m['PriceSnapshot'] ?? 0) as num).toDouble(),
-        runningBalance: ((m['RunningBalance'] ?? 0) as num).toInt(),
-      );
+    ledgerId: ((m['LedgerID'] ?? 0) as num).toInt(),
+    timestamp: (m['Timestamp'] ?? '').toString(),
+    itemName: (m['ItemName'] ?? '[Deleted Item]').toString(),
+    sku: (m['SKU'] ?? '—').toString(),
+    changeType: (m['ChangeType'] ?? '').toString(),
+    deltaQuantity: ((m['DeltaQuantity'] ?? 0) as num).toInt(),
+    priceSnapshot: ((m['PriceSnapshot'] ?? 0) as num).toDouble(),
+    runningBalance: ((m['RunningBalance'] ?? 0) as num).toInt(),
+  );
 }
 
 class LedgerPage {
@@ -134,12 +142,12 @@ class SupplierRecord {
   final String notes;
 
   factory SupplierRecord.fromMap(Map<String, Object?> m) => SupplierRecord(
-        id: (m['SupplierID'] as num).toInt(),
-        name: (m['SupplierName'] ?? '').toString(),
-        email: (m['ContactEmail'] ?? '').toString(),
-        phone: (m['Phone'] ?? '').toString(),
-        notes: (m['Notes'] ?? '').toString(),
-      );
+    id: (m['SupplierID'] as num).toInt(),
+    name: (m['SupplierName'] ?? '').toString(),
+    email: (m['ContactEmail'] ?? '').toString(),
+    phone: (m['Phone'] ?? '').toString(),
+    notes: (m['Notes'] ?? '').toString(),
+  );
 }
 
 class AuditFilter {
