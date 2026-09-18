@@ -52,9 +52,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
 
   void _error(Object e) {
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -78,8 +76,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
     if (supplier == null) return;
     final ok = await showSmartConfirm(
       context,
-      message:
-          "Delete supplier '${supplier.name}'?\n\nLinked ledger entries will lose their supplier reference.",
+      message: "Delete supplier '${supplier.name}'?\n\nLinked ledger entries will lose their supplier reference.",
     );
     if (!ok) return;
     try {
@@ -93,11 +90,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
   void _edit(SupplierRecord supplier) {
     widget.controller.selectSupplier(supplier);
     if (_pageScroll.hasClients) {
-      _pageScroll.animateTo(
-        0,
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOut,
-      );
+      _pageScroll.animateTo(0, duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
     }
   }
 
@@ -108,14 +101,9 @@ class _SuppliersPageState extends State<SuppliersPage> {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 600;
         final expanded = constraints.maxWidth >= 1100;
-        final padding = expanded
-            ? 24.0
-            : compact
-            ? 12.0
-            : 18.0;
+        final padding = expanded ? 24.0 : compact ? 12.0 : 18.0;
         final form = _SupplierForm(
           fillHeight: expanded,
-          compact: compact,
           name: _name,
           email: _email,
           phone: _phone,
@@ -127,18 +115,32 @@ class _SuppliersPageState extends State<SuppliersPage> {
         );
 
         if (expanded) {
-          return Padding(
+          return SingleChildScrollView(
+            controller: _pageScroll,
             padding: EdgeInsets.all(padding),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(width: 360, child: form),
+                SizedBox(
+                  width: 360,
+                  child: _SupplierForm(
+                    fillHeight: false,
+                    name: _name,
+                    email: _email,
+                    phone: _phone,
+                    notes: _notes,
+                    editing: widget.controller.selectedSupplier != null,
+                    onSave: _save,
+                    onClear: _clear,
+                    onDelete: () => _delete(),
+                  ),
+                ),
                 const SizedBox(width: 20),
                 Expanded(
                   child: _SupplierDirectory(
                     controller: widget.controller,
                     useTable: true,
-                    bounded: true,
+                    bounded: false,
                     onEdit: _edit,
                     onDelete: _delete,
                   ),
@@ -172,7 +174,6 @@ class _SuppliersPageState extends State<SuppliersPage> {
 class _SupplierForm extends StatelessWidget {
   const _SupplierForm({
     required this.fillHeight,
-    required this.compact,
     required this.name,
     required this.email,
     required this.phone,
@@ -184,7 +185,6 @@ class _SupplierForm extends StatelessWidget {
   });
 
   final bool fillHeight;
-  final bool compact;
   final TextEditingController name;
   final TextEditingController email;
   final TextEditingController phone;
@@ -204,41 +204,28 @@ class _SupplierForm extends StatelessWidget {
           TextField(
             controller: name,
             textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(
-              labelText: 'Company Name',
-              prefixIcon: Icon(Icons.business_outlined),
-            ),
+            decoration: const InputDecoration(labelText: 'Company Name', prefixIcon: Icon(Icons.business_outlined)),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: email,
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              prefixIcon: Icon(Icons.email_outlined),
-            ),
+            decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: phone,
             keyboardType: TextInputType.phone,
             textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(
-              labelText: 'Phone',
-              prefixIcon: Icon(Icons.phone_outlined),
-            ),
+            decoration: const InputDecoration(labelText: 'Phone', prefixIcon: Icon(Icons.phone_outlined)),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: notes,
             minLines: 3,
             maxLines: 5,
-            decoration: const InputDecoration(
-              labelText: 'Notes',
-              alignLabelWithHint: true,
-              prefixIcon: Icon(Icons.notes_outlined),
-            ),
+            decoration: const InputDecoration(labelText: 'Notes', alignLabelWithHint: true, prefixIcon: Icon(Icons.notes_outlined)),
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
@@ -279,17 +266,9 @@ class _SupplierForm extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  editing ? 'Edit Supplier' : 'Add Supplier',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                Text(editing ? 'Edit Supplier' : 'Add Supplier', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text(
-                  'Maintain supplier contact details in one place.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                Text('Maintain supplier contact details in one place.', style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),
@@ -323,8 +302,8 @@ class _SupplierDirectory extends StatelessWidget {
             child: Center(child: Text('No suppliers yet.')),
           )
         : useTable
-        ? _table(context)
-        : _cards(context);
+            ? _table(context)
+            : _cards(context);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -336,17 +315,9 @@ class _SupplierDirectory extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Supplier Directory',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                Text('Supplier Directory', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 2),
-                Text(
-                  '${controller.suppliers.length} supplier record(s)',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                Text('${controller.suppliers.length} supplier record(s)', style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),
@@ -357,70 +328,39 @@ class _SupplierDirectory extends StatelessWidget {
     );
   }
 
-  Widget _table(BuildContext context) => SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    child: SingleChildScrollView(
-      child: DataTable(
-        showCheckboxColumn: false,
-        columns: const [
-          DataColumn(label: Text('Supplier ID'), numeric: true),
-          DataColumn(label: Text('Company Name')),
-          DataColumn(label: Text('Email')),
-          DataColumn(label: Text('Phone')),
-          DataColumn(label: Text('Notes')),
-        ],
-        rows: controller.suppliers
-            .map(
-              (supplier) => DataRow(
-                selected: controller.selectedSupplier?.id == supplier.id,
-                onSelectChanged: (_) => onEdit(supplier),
-                cells: [
-                  DataCell(
-                    Text('#SUP-${supplier.id.toString().padLeft(4, '0')}'),
-                  ),
-                  DataCell(
-                    SizedBox(
-                      width: 180,
-                      child: Text(
-                        supplier.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+  Widget _table(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: constraints.maxWidth),
+            child: DataTable(
+              showCheckboxColumn: false,
+              columns: const [
+                DataColumn(label: Text('Supplier ID'), numeric: true),
+                DataColumn(label: Text('Company Name')),
+                DataColumn(label: Text('Email')),
+                DataColumn(label: Text('Phone')),
+                DataColumn(label: Text('Notes')),
+              ],
+              rows: controller.suppliers
+                  .map(
+                    (supplier) => DataRow(
+                      selected: controller.selectedSupplier?.id == supplier.id,
+                      onSelectChanged: (_) => onEdit(supplier),
+                      cells: [
+                        DataCell(Text('#SUP-${supplier.id.toString().padLeft(4, '0')}')),
+                        DataCell(SizedBox(width: 180, child: Text(supplier.name, overflow: TextOverflow.ellipsis))),
+                        DataCell(SizedBox(width: 180, child: Text(supplier.email, overflow: TextOverflow.ellipsis))),
+                        DataCell(SizedBox(width: 130, child: Text(supplier.phone, overflow: TextOverflow.ellipsis))),
+                        DataCell(SizedBox(width: 220, child: Text(supplier.notes, overflow: TextOverflow.ellipsis))),
+                      ],
                     ),
-                  ),
-                  DataCell(
-                    SizedBox(
-                      width: 180,
-                      child: Text(
-                        supplier.email,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  DataCell(
-                    SizedBox(
-                      width: 130,
-                      child: Text(
-                        supplier.phone,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                  DataCell(
-                    SizedBox(
-                      width: 220,
-                      child: Text(
-                        supplier.notes,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-            .toList(),
-      ),
-    ),
-  );
+                  )
+                  .toList(),
+            ),
+          ),
+        ),
+      );
 
   Widget _cards(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -429,19 +369,15 @@ class _SupplierDirectory extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(10),
       itemCount: controller.suppliers.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final supplier = controller.suppliers[index];
         final selected = controller.selectedSupplier?.id == supplier.id;
         return Material(
-          color: selected
-              ? scheme.secondaryContainer.withValues(alpha: .5)
-              : scheme.surfaceContainerLowest,
+          color: selected ? scheme.secondaryContainer.withValues(alpha: .5) : scheme.surfaceContainerLowest,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
-            side: BorderSide(
-              color: selected ? scheme.primary : scheme.outlineVariant,
-            ),
+            side: BorderSide(color: selected ? scheme.primary : scheme.outlineVariant),
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(14),
@@ -454,50 +390,26 @@ class _SupplierDirectory extends StatelessWidget {
                   Container(
                     width: 44,
                     height: 44,
-                    decoration: BoxDecoration(
-                      color: scheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.business_outlined,
-                      color: scheme.onPrimaryContainer,
-                    ),
+                    decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(12)),
+                    child: Icon(Icons.business_outlined, color: scheme.onPrimaryContainer),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          supplier.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
+                        Text(supplier.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
                         if (supplier.email.isNotEmpty) ...[
                           const SizedBox(height: 5),
-                          Text(
-                            supplier.email,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
+                          Text(supplier.email, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
                         ],
                         if (supplier.phone.isNotEmpty) ...[
                           const SizedBox(height: 3),
-                          Text(
-                            supplier.phone,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
+                          Text(supplier.phone, style: Theme.of(context).textTheme.bodySmall),
                         ],
                         if (supplier.notes.isNotEmpty) ...[
                           const SizedBox(height: 8),
-                          Text(
-                            supplier.notes,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
+                          Text(supplier.notes, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
                         ],
                       ],
                     ),
@@ -509,20 +421,8 @@ class _SupplierDirectory extends StatelessWidget {
                       if (value == 'delete') onDelete(supplier);
                     },
                     itemBuilder: (context) => const [
-                      PopupMenuItem(
-                        value: 'edit',
-                        child: ListTile(
-                          leading: Icon(Icons.edit_outlined),
-                          title: Text('Edit'),
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: ListTile(
-                          leading: Icon(Icons.delete_outline),
-                          title: Text('Delete'),
-                        ),
-                      ),
+                      PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Edit'))),
+                      PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline), title: Text('Delete'))),
                     ],
                   ),
                 ],

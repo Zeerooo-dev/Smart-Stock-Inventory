@@ -7,6 +7,7 @@ import '../state/smartstock_controller.dart';
 import 'pages/audit_page.dart';
 import 'pages/inventory_page.dart';
 import 'pages/reports_page.dart';
+import 'pages/sales_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/suppliers_page.dart';
 
@@ -56,11 +57,7 @@ class _SmartStockShellState extends State<SmartStockShell> {
                         color: Theme.of(context).colorScheme.primaryContainer,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(
-                        Icons.inventory_2_rounded,
-                        size: 19,
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
+                      child: Icon(Icons.inventory_2_rounded, size: 19, color: Theme.of(context).colorScheme.onPrimaryContainer),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -83,7 +80,13 @@ class _SmartStockShellState extends State<SmartStockShell> {
             body: SafeArea(
               child: Row(
                 children: [
-                  _AdaptiveRail(controller: controller, extended: extendedRail),
+                  Material(
+                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    child: _AdaptiveRail(
+                      controller: controller,
+                      extended: extendedRail,
+                    ),
+                  ),
                   const VerticalDivider(width: 1),
                   Expanded(child: page),
                 ],
@@ -96,12 +99,13 @@ class _SmartStockShellState extends State<SmartStockShell> {
   }
 
   Widget _currentPage() => switch (controller.section) {
-    AppSection.inventory => InventoryPageView(controller: controller),
-    AppSection.reports => ReportsPage(controller: controller),
-    AppSection.audit => AuditPage(controller: controller),
-    AppSection.suppliers => SuppliersPage(controller: controller),
-    AppSection.settings => SettingsPage(controller: controller),
-  };
+        AppSection.inventory => InventoryPageView(controller: controller),
+        AppSection.sales => SalesPage(controller: controller),
+        AppSection.reports => ReportsPage(controller: controller),
+        AppSection.audit => AuditPage(controller: controller),
+        AppSection.suppliers => SuppliersPage(controller: controller),
+        AppSection.settings => SettingsPage(controller: controller),
+      };
 
   KeyEventResult _onScannerKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent || _isTextEditing()) {
@@ -120,7 +124,7 @@ class _SmartStockShellState extends State<SmartStockShell> {
       _scanBuffer = '';
       _lastScanKey = null;
       if (scanned.length >= 6) {
-        unawaited(controller.locateSku(scanned));
+        unawaited(controller.handleScannedSku(scanned));
       }
       return KeyEventResult.ignored;
     }
@@ -146,13 +150,15 @@ class _SmartStockShellState extends State<SmartStockShell> {
   }
 }
 
+
 String _sectionLabel(AppSection section) => switch (section) {
-  AppSection.inventory => 'Inventory',
-  AppSection.reports => 'Reports',
-  AppSection.audit => 'Audit Log',
-  AppSection.suppliers => 'Suppliers',
-  AppSection.settings => 'Settings',
-};
+      AppSection.inventory => 'Inventory',
+      AppSection.sales => 'Sales',
+      AppSection.reports => 'Reports',
+      AppSection.audit => 'Audit Log',
+      AppSection.suppliers => 'Suppliers',
+      AppSection.settings => 'Settings',
+    };
 
 class _AdaptiveRail extends StatelessWidget {
   const _AdaptiveRail({required this.controller, required this.extended});
@@ -166,16 +172,10 @@ class _AdaptiveRail extends StatelessWidget {
       extended: extended,
       minExtendedWidth: 220,
       selectedIndex: controller.section.index,
-      onDestinationSelected: (index) =>
-          controller.goTo(AppSection.values[index]),
+      onDestinationSelected: (index) => controller.goTo(AppSection.values[index]),
       groupAlignment: -0.78,
       leading: Padding(
-        padding: EdgeInsets.fromLTRB(
-          extended ? 20 : 8,
-          18,
-          extended ? 20 : 8,
-          18,
-        ),
+        padding: EdgeInsets.fromLTRB(extended ? 20 : 8, 18, extended ? 20 : 8, 18),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -186,19 +186,16 @@ class _AdaptiveRail extends StatelessWidget {
                 color: scheme.primaryContainer,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(
-                Icons.inventory_2_rounded,
-                color: scheme.onPrimaryContainer,
-              ),
+              child: Icon(Icons.inventory_2_rounded, color: scheme.onPrimaryContainer),
             ),
             if (extended) ...[
               const SizedBox(width: 12),
               Text(
                 'SmartStock',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: scheme.primary,
-                ),
+                      fontWeight: FontWeight.w800,
+                      color: scheme.primary,
+                    ),
               ),
             ],
           ],
@@ -209,6 +206,11 @@ class _AdaptiveRail extends StatelessWidget {
           icon: Icon(Icons.inventory_2_outlined),
           selectedIcon: Icon(Icons.inventory_2),
           label: Text('Inventory'),
+        ),
+        NavigationRailDestination(
+          icon: Icon(Icons.point_of_sale_outlined),
+          selectedIcon: Icon(Icons.point_of_sale),
+          label: Text('Sales'),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.analytics_outlined),
@@ -239,44 +241,133 @@ class _MobileNav extends StatelessWidget {
   const _MobileNav({required this.controller});
   final SmartStockController controller;
 
+  static const _primarySections = <AppSection>[
+    AppSection.inventory,
+    AppSection.sales,
+    AppSection.reports,
+  ];
+
+  int get _selectedIndex {
+    final primaryIndex = _primarySections.indexOf(controller.section);
+    return primaryIndex >= 0 ? primaryIndex : 3;
+  }
+
   @override
   Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: NavigationBar(
-      height: 68,
-      labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-      selectedIndex: controller.section.index,
-      onDestinationSelected: (index) =>
-          controller.goTo(AppSection.values[index]),
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.inventory_2_outlined),
-          selectedIcon: Icon(Icons.inventory_2),
-          label: 'Inventory',
+        top: false,
+        child: NavigationBar(
+          height: 68,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (index) {
+            if (index < _primarySections.length) {
+              controller.goTo(_primarySections[index]);
+            } else {
+              _showMore(context);
+            }
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.inventory_2_outlined),
+              selectedIcon: Icon(Icons.inventory_2),
+              label: 'Inventory',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.point_of_sale_outlined),
+              selectedIcon: Icon(Icons.point_of_sale),
+              label: 'Sales',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.analytics_outlined),
+              selectedIcon: Icon(Icons.analytics),
+              label: 'Reports',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.more_horiz),
+              selectedIcon: Icon(Icons.more_horiz),
+              label: 'More',
+            ),
+          ],
         ),
-        NavigationDestination(
-          icon: Icon(Icons.analytics_outlined),
-          selectedIcon: Icon(Icons.analytics),
-          label: 'Reports',
+      );
+
+  Future<void> _showMore(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('More', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            _MoreDestination(
+              icon: Icons.receipt_long_outlined,
+              label: 'Audit Log',
+              selected: controller.section == AppSection.audit,
+              onTap: () {
+                Navigator.pop(context);
+                controller.goTo(AppSection.audit);
+              },
+            ),
+            _MoreDestination(
+              icon: Icons.local_shipping_outlined,
+              label: 'Suppliers',
+              selected: controller.section == AppSection.suppliers,
+              onTap: () {
+                Navigator.pop(context);
+                controller.goTo(AppSection.suppliers);
+              },
+            ),
+            _MoreDestination(
+              icon: Icons.settings_outlined,
+              label: 'Settings',
+              selected: controller.section == AppSection.settings,
+              onTap: () {
+                Navigator.pop(context);
+                controller.goTo(AppSection.settings);
+              },
+            ),
+          ],
         ),
-        NavigationDestination(
-          icon: Icon(Icons.receipt_long_outlined),
-          selectedIcon: Icon(Icons.receipt_long),
-          label: 'Audit',
+      ),
+    );
+  }
+}
+
+class _MoreDestination extends StatelessWidget {
+  const _MoreDestination({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListTile(
+      leading: Icon(icon, color: selected ? scheme.onSurface : scheme.onSurfaceVariant),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: selected ? scheme.primary : scheme.onSurface,
+          fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
         ),
-        NavigationDestination(
-          icon: Icon(Icons.local_shipping_outlined),
-          selectedIcon: Icon(Icons.local_shipping),
-          label: 'Suppliers',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.settings_outlined),
-          selectedIcon: Icon(Icons.settings),
-          label: 'Settings',
-        ),
-      ],
-    ),
-  );
+      ),
+      trailing: selected ? Icon(Icons.check_circle, color: scheme.primary) : null,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      tileColor: selected ? scheme.primaryContainer : null,
+      onTap: onTap,
+    );
+  }
 }
 
 class _StatusBar extends StatelessWidget {
@@ -292,11 +383,7 @@ class _StatusBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         child: Row(
           children: [
-            Icon(
-              Icons.info_outline,
-              size: 16,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+            Icon(Icons.info_outline, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
             const SizedBox(width: 8),
             Expanded(
               child: Text(

@@ -14,16 +14,16 @@ import '../services/export_service.dart';
 import '../services/database_crypto.dart';
 import '../services/scheduled_report_writer.dart';
 
-enum AppSection { inventory, reports, audit, suppliers, settings }
+enum AppSection { inventory, sales, reports, audit, suppliers, settings }
 
 enum ScheduledFormat { csvOnly, pdfOnly, csvAndPdf }
 
 extension ScheduledFormatLabel on ScheduledFormat {
   String get label => switch (this) {
-    ScheduledFormat.csvOnly => 'CSV only',
-    ScheduledFormat.pdfOnly => 'PDF only',
-    ScheduledFormat.csvAndPdf => 'Both CSV and PDF',
-  };
+        ScheduledFormat.csvOnly => 'CSV only',
+        ScheduledFormat.pdfOnly => 'PDF only',
+        ScheduledFormat.csvAndPdf => 'Both CSV and PDF',
+      };
 }
 
 class SmartStockController extends ChangeNotifier {
@@ -46,6 +46,15 @@ class SmartStockController extends ChangeNotifier {
   int inventoryPageIndex = 0;
   String inventorySearch = '';
   InventoryItem? selectedItem;
+
+  String saleSearch = '';
+  List<InventoryItem> saleSearchResults = const [];
+  List<SaleCartLine> saleCart = const [];
+  List<SaleRecord> recentSales = const [];
+  bool saleBusy = false;
+
+  double get saleCartTotal => saleCart.fold(0.0, (sum, line) => sum + line.subtotal);
+  int get saleCartUnits => saleCart.fold(0, (sum, line) => sum + line.quantity);
 
   KpiSnapshot kpis = KpiSnapshot.empty;
   List<CategorySummary> categorySummaries = const [];
@@ -70,8 +79,7 @@ class SmartStockController extends ChangeNotifier {
   String schedulerOutputDirectory = '';
 
   int get inventoryTotalPages {
-    final pages = (inventoryPage.total / DatabaseService.inventoryPageSize)
-        .ceil();
+    final pages = (inventoryPage.total / DatabaseService.inventoryPageSize).ceil();
     return pages < 1 ? 1 : pages;
   }
 
@@ -91,9 +99,7 @@ class SmartStockController extends ChangeNotifier {
       );
       await refreshAll();
       startupError = null;
-      statusMessage = sandbox
-          ? 'Sandbox database loaded.'
-          : 'SmartStock ready.';
+      statusMessage = sandbox ? 'Sandbox database loaded.' : 'SmartStock ready.';
     } catch (e) {
       needsLegacyPassphrase =
           e is LegacyDatabaseKeyRequired || legacyPassphrase != null;
@@ -109,6 +115,7 @@ class SmartStockController extends ChangeNotifier {
     await Future.wait([
       refreshCategories(notify: false),
       refreshInventory(notify: false),
+      refreshSales(notify: false),
       refreshReports(notify: false),
       refreshAudit(notify: false),
       refreshSuppliers(notify: false),
@@ -118,6 +125,7 @@ class SmartStockController extends ChangeNotifier {
 
   void goTo(AppSection next) {
     section = next;
+    if (next == AppSection.sales) unawaited(refreshSales());
     if (next == AppSection.reports) unawaited(refreshReports());
     if (next == AppSection.audit) unawaited(refreshAudit());
     if (next == AppSection.suppliers) unawaited(refreshSuppliers());
@@ -135,21 +143,21 @@ class SmartStockController extends ChangeNotifier {
   }
 
   Future<void> refreshInventory({bool notify = true}) async {
-    inventoryPage = await database.getInventoryPage(
-      search: inventorySearch,
-      page: inventoryPageIndex,
-    );
+    inventoryPage = await database.getInventoryPage(search: inventorySearch, page: inventoryPageIndex);
     final totalPages = inventoryTotalPages;
     if (inventoryPageIndex >= totalPages) {
       inventoryPageIndex = totalPages - 1;
-      inventoryPage = await database.getInventoryPage(
-        search: inventorySearch,
-        page: inventoryPageIndex,
-      );
+      inventoryPage = await database.getInventoryPage(search: inventorySearch, page: inventoryPageIndex);
     }
-    if (selectedItem != null &&
-        !inventoryPage.items.any((i) => i.id == selectedItem!.id)) {
-      selectedItem = null;
+    if (selectedItem != null) {
+      InventoryItem? freshSelection;
+      for (final item in inventoryPage.items) {
+        if (item.id == selectedItem!.id) {
+          freshSelection = item;
+          break;
+        }
+      }
+      selectedItem = freshSelection;
     }
     if (notify) notifyListeners();
   }
@@ -167,9 +175,7 @@ class SmartStockController extends ChangeNotifier {
   }
 
   Future<void> inventoryNext() async {
-    if ((inventoryPageIndex + 1) * DatabaseService.inventoryPageSize >=
-        inventoryPage.total)
-      return;
+    if ((inventoryPageIndex + 1) * DatabaseService.inventoryPageSize >= inventoryPage.total) return;
     inventoryPageIndex++;
     await refreshInventory();
   }
@@ -226,28 +232,189 @@ class SmartStockController extends ChangeNotifier {
     await _refreshAfterInventoryMutation();
   }
 
-  Future<void> adjustStock(
-    InventoryItem item,
-    int amount, {
-    required bool restock,
-  }) async {
-    await database.adjustStock(
-      itemId: item.id,
-      amount: amount,
-      restock: restock,
-    );
-    statusMessage =
-        '${restock ? 'Restocked' : 'Dispensed'} $amount unit(s) for \'${item.name}\'.';
-    await _refreshAfterInventoryMutation();
-  }
 
   Future<void> _refreshAfterInventoryMutation() async {
     await Future.wait([
       refreshInventory(notify: false),
+      refreshSales(notify: false),
       refreshReports(notify: false),
       refreshAudit(notify: false),
     ]);
     notifyListeners();
+  }
+
+  Future<void> refreshSales({bool notify = true}) async {
+    saleSearchResults = await database.searchSaleInventory(saleSearch);
+    recentSales = await database.getRecentSales();
+    if (saleCart.isNotEmpty) {
+      final freshItems = await database.getInventoryItemsByIds(saleCart.map((line) => line.item.id));
+      final byId = {for (final item in freshItems) item.id: item};
+      final refreshedCart = <SaleCartLine>[];
+      for (final line in saleCart) {
+        final item = byId[line.item.id];
+        if (item == null || item.quantity <= 0) continue;
+        final quantity = line.quantity > item.quantity ? item.quantity : line.quantity;
+        refreshedCart.add(line.copyWith(item: item, quantity: quantity));
+      }
+      saleCart = refreshedCart;
+    }
+    if (notify) notifyListeners();
+  }
+
+  Future<void> setSaleSearch(String value) async {
+    saleSearch = value.trim();
+    saleSearchResults = await database.searchSaleInventory(saleSearch);
+    notifyListeners();
+  }
+
+  Future<void> addSaleItem(InventoryItem item, {int quantity = 1}) async {
+    if (quantity <= 0) return;
+    if (item.quantity <= 0) {
+      throw StateError("'${item.name}' is out of stock.");
+    }
+    final index = saleCart.indexWhere((line) => line.item.id == item.id);
+    final current = index < 0 ? 0 : saleCart[index].quantity;
+    final next = current + quantity;
+    if (next > item.quantity) {
+      throw StateError("Only ${item.quantity} unit(s) of '${item.name}' are available.");
+    }
+    final updated = [...saleCart];
+    if (index < 0) {
+      updated.add(SaleCartLine(item: item, quantity: quantity));
+    } else {
+      updated[index] = updated[index].copyWith(quantity: next, item: item);
+    }
+    saleCart = updated;
+    statusMessage = "Added '${item.name}' to sale.";
+    notifyListeners();
+  }
+
+  void setSaleCartQuantity(int itemId, int quantity) {
+    final index = saleCart.indexWhere((line) => line.item.id == itemId);
+    if (index < 0) return;
+    if (quantity <= 0) {
+      removeSaleCartItem(itemId);
+      return;
+    }
+    final line = saleCart[index];
+    if (quantity > line.item.quantity) {
+      throw StateError("Only ${line.item.quantity} unit(s) of '${line.item.name}' are available.");
+    }
+    final updated = [...saleCart];
+    updated[index] = line.copyWith(quantity: quantity);
+    saleCart = updated;
+    notifyListeners();
+  }
+
+  void removeSaleCartItem(int itemId) {
+    saleCart = saleCart.where((line) => line.item.id != itemId).toList(growable: false);
+    notifyListeners();
+  }
+
+  void clearSaleCart() {
+    saleCart = const [];
+    statusMessage = 'Sale cart cleared.';
+    notifyListeners();
+  }
+
+  Future<void> beginSaleWithItem(InventoryItem item) async {
+    section = AppSection.sales;
+    await refreshSales(notify: false);
+    await addSaleItem(item);
+    notifyListeners();
+  }
+
+  Future<bool> tryAddSaleSearch(String value) async {
+    final clean = value.trim();
+    if (clean.isEmpty) return false;
+    final exact = await database.findItemBySku(clean);
+    if (exact != null) {
+      await addSaleItem(exact);
+      saleSearch = '';
+      saleSearchResults = await database.searchSaleInventory('');
+      notifyListeners();
+      return true;
+    }
+    final matches = await database.searchSaleInventory(clean, limit: 2);
+    if (matches.length == 1) {
+      await addSaleItem(matches.first);
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> addSaleBySku(String sku) async {
+    final item = await database.findItemBySku(sku);
+    if (item == null) {
+      statusMessage = 'Barcode not found: $sku';
+      notifyListeners();
+      return;
+    }
+    await addSaleItem(item);
+    saleSearch = '';
+    saleSearchResults = await database.searchSaleInventory('');
+    statusMessage = "Scanned '${item.name}' into the sale.";
+    notifyListeners();
+  }
+
+  Future<void> handleScannedSku(String sku) async {
+    try {
+      if (section == AppSection.sales) {
+        await addSaleBySku(sku);
+      } else {
+        await locateSku(sku);
+      }
+    } catch (e) {
+      statusMessage = e.toString().replaceFirst('Bad state: ', '');
+      notifyListeners();
+    }
+  }
+
+  Future<SaleRecord> completeSale({String notes = ''}) async {
+    if (saleCart.isEmpty) throw StateError('Add at least one item before completing the sale.');
+    saleBusy = true;
+    notifyListeners();
+    try {
+      final sale = await database.completeSale(
+        saleCart.map((line) => SaleDraftLine(itemId: line.item.id, quantity: line.quantity)).toList(),
+        notes: notes,
+      );
+      saleCart = const [];
+      saleSearch = '';
+      statusMessage = '${sale.saleNumber} completed · ${sale.totalItems} unit(s) · ₱${sale.totalAmount.toStringAsFixed(2)}.';
+      await Future.wait([
+        refreshInventory(notify: false),
+        refreshSales(notify: false),
+        refreshReports(notify: false),
+        refreshAudit(notify: false),
+      ]);
+      notifyListeners();
+      return sale;
+    } finally {
+      saleBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<SaleDetail> getSaleDetail(int saleId) => database.getSaleDetail(saleId);
+
+  Future<void> voidSale(SaleRecord sale) async {
+    saleBusy = true;
+    notifyListeners();
+    try {
+      await database.voidSale(sale.id);
+      statusMessage = '${sale.saleNumber} voided and stock restored.';
+      await Future.wait([
+        refreshInventory(notify: false),
+        refreshSales(notify: false),
+        refreshReports(notify: false),
+        refreshAudit(notify: false),
+      ]);
+      notifyListeners();
+    } finally {
+      saleBusy = false;
+      notifyListeners();
+    }
   }
 
   Future<void> locateSku(String sku) async {
@@ -302,17 +469,11 @@ class SmartStockController extends ChangeNotifier {
 
   Future<void> refreshAudit({bool notify = true}) async {
     auditItemNames = await database.getAuditItemNames();
-    auditPage = await database.getAuditPage(
-      filter: auditFilter,
-      page: auditPageIndex,
-    );
+    auditPage = await database.getAuditPage(filter: auditFilter, page: auditPageIndex);
     final totalPages = auditTotalPages;
     if (auditPageIndex >= totalPages) {
       auditPageIndex = totalPages - 1;
-      auditPage = await database.getAuditPage(
-        filter: auditFilter,
-        page: auditPageIndex,
-      );
+      auditPage = await database.getAuditPage(filter: auditFilter, page: auditPageIndex);
     }
     if (notify) notifyListeners();
   }
@@ -341,8 +502,7 @@ class SmartStockController extends ChangeNotifier {
   }
 
   Future<void> auditNext() async {
-    if ((auditPageIndex + 1) * DatabaseService.auditPageSize >= auditPage.total)
-      return;
+    if ((auditPageIndex + 1) * DatabaseService.auditPageSize >= auditPage.total) return;
     auditPageIndex++;
     await refreshAudit();
   }
@@ -375,8 +535,7 @@ class SmartStockController extends ChangeNotifier {
 
   Future<void> refreshSuppliers({bool notify = true}) async {
     suppliers = await database.getSuppliers();
-    if (selectedSupplier != null &&
-        !suppliers.any((s) => s.id == selectedSupplier!.id)) {
+    if (selectedSupplier != null && !suppliers.any((s) => s.id == selectedSupplier!.id)) {
       selectedSupplier = null;
     }
     if (notify) notifyListeners();
@@ -387,20 +546,8 @@ class SmartStockController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> saveSupplier({
-    int? id,
-    required String name,
-    String email = '',
-    String phone = '',
-    String notes = '',
-  }) async {
-    await database.saveSupplier(
-      id: id,
-      name: name,
-      email: email,
-      phone: phone,
-      notes: notes,
-    );
+  Future<void> saveSupplier({int? id, required String name, String email = '', String phone = '', String notes = ''}) async {
+    await database.saveSupplier(id: id, name: name, email: email, phone: phone, notes: notes);
     statusMessage = "Supplier '$name' ${id == null ? 'added' : 'updated'}.";
     selectedSupplier = null;
     await refreshSuppliers();
@@ -434,9 +581,7 @@ class SmartStockController extends ChangeNotifier {
 
   void setAccent(Color? color) {
     customAccent = color;
-    statusMessage = color == null
-        ? 'Custom accent reset.'
-        : 'Custom accent applied.';
+    statusMessage = color == null ? 'Custom accent reset.' : 'Custom accent applied.';
     notifyListeners();
   }
 
@@ -461,15 +606,12 @@ class SmartStockController extends ChangeNotifier {
 
   Future<void> resetInventory() async {
     await database.resetInventory();
-    statusMessage =
-        'All inventory items were cleared. Categories were preserved.';
+    statusMessage = 'All inventory items were cleared. Categories were preserved.';
     await _refreshAfterInventoryMutation();
   }
 
   Future<String?> chooseSchedulerDirectory() async {
-    final path = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Choose scheduled report folder',
-    );
+    final path = await FilePicker.getDirectoryPath(dialogTitle: 'Choose scheduled report folder');
     if (path != null) {
       schedulerOutputDirectory = path;
       notifyListeners();
@@ -477,24 +619,15 @@ class SmartStockController extends ChangeNotifier {
     return path;
   }
 
-  void startScheduler({
-    required int minutes,
-    required ScheduledFormat format,
-    required String directory,
-  }) {
-    if (minutes < 5)
-      throw ArgumentError('Interval must be at least 5 minutes.');
-    if (directory.trim().isEmpty)
-      throw ArgumentError('Choose an output folder first.');
+  void startScheduler({required int minutes, required ScheduledFormat format, required String directory}) {
+    if (minutes < 5) throw ArgumentError('Interval must be at least 5 minutes.');
+    if (directory.trim().isEmpty) throw ArgumentError('Choose an output folder first.');
     _scheduler?.cancel();
     schedulerIntervalMinutes = minutes;
     schedulerFormat = format;
     schedulerOutputDirectory = directory.trim();
     schedulerRunning = true;
-    _scheduler = Timer.periodic(
-      Duration(minutes: minutes),
-      (_) => unawaited(_schedulerFire()),
-    );
+    _scheduler = Timer.periodic(Duration(minutes: minutes), (_) => unawaited(_schedulerFire()));
     statusMessage = 'Scheduler started: ${format.label} every $minutes min.';
     notifyListeners();
   }
@@ -511,30 +644,18 @@ class SmartStockController extends ChangeNotifier {
     final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     var wroteAny = false;
     try {
-      if (schedulerFormat == ScheduledFormat.csvOnly ||
-          schedulerFormat == ScheduledFormat.csvAndPdf) {
+      if (schedulerFormat == ScheduledFormat.csvOnly || schedulerFormat == ScheduledFormat.csvAndPdf) {
         final items = await database.getAllInventory();
         final rows = <List<Object?>>[
           ['ItemID', 'SKU', 'ItemName', 'Category', 'Quantity', 'UnitPrice'],
-          ...items.map(
-            (i) => [i.id, i.sku, i.name, i.category, i.quantity, i.unitPrice],
-          ),
+          ...items.map((i) => [i.id, i.sku, i.name, i.category, i.quantity, i.unitPrice]),
         ];
         final bytes = Uint8List.fromList(utf8.encode(Csv().encode(rows)));
-        wroteAny |= await writeScheduledFile(
-          schedulerOutputDirectory,
-          'inventory_$stamp.csv',
-          bytes,
-        );
+        wroteAny |= await writeScheduledFile(schedulerOutputDirectory, 'inventory_$stamp.csv', bytes);
       }
-      if (schedulerFormat == ScheduledFormat.pdfOnly ||
-          schedulerFormat == ScheduledFormat.csvAndPdf) {
+      if (schedulerFormat == ScheduledFormat.pdfOnly || schedulerFormat == ScheduledFormat.csvAndPdf) {
         final bytes = await exports.buildInventoryPdf(scheduled: true);
-        wroteAny |= await writeScheduledFile(
-          schedulerOutputDirectory,
-          'report_$stamp.pdf',
-          bytes,
-        );
+        wroteAny |= await writeScheduledFile(schedulerOutputDirectory, 'report_$stamp.pdf', bytes);
       }
       statusMessage = wroteAny
           ? 'Scheduled report generated: $stamp'

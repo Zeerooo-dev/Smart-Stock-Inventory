@@ -31,4 +31,19 @@ void main() {
     expect(supplier.phone, '');
     expect(supplier.notes, '');
   });
+
+  test('SaleCartLine calculates subtotal and copies quantity', () {
+    final item = InventoryItem.fromMap({
+      'ItemID': 2,
+      'SKU': 'SALE-ITEM-2',
+      'ItemName': 'Notebook',
+      'Quantity': 12,
+      'UnitPrice': 45.0,
+      'CategoryName': 'Stationery',
+      'ReorderLevel': 3,
+    });
+    final line = SaleCartLine(item: item, quantity: 2);
+    expect(line.subtotal, 90.0);
+    expect(line.copyWith(quantity: 3).subtotal, 135.0);
+  });
 }
