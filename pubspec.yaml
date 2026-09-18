@@ -1,7 +1,7 @@
 name: smartstock_flutter
 description: Flutter rebuild of SmartStock Inventory System.
 publish_to: 'none'
-version: 2.0.0-beta.1+2
+version: 2.0.1+3
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
