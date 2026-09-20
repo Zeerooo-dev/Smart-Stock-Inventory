@@ -1,0 +1,83 @@
+name: Build Windows v2.0.1
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release-v2.0.1
+  cancel-in-progress: false
+
+jobs:
+  windows-release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify existing release and version
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view v2.0.1
+          if ($LASTEXITCODE -ne 0) { throw "The existing v2.0.1 release is required." }
+          if (!(Select-String -Path pubspec.yaml -Pattern '^version: 2\.0\.1\+3$' -Quiet)) {
+            throw "This workflow is only for SmartStock 2.0.1+3."
+          }
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      - name: Get dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Analyze
+        # Existing informational style lints remain visible; errors and warnings fail.
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Package complete Windows release
+        shell: pwsh
+        run: |
+          $releaseDir = "build\windows\x64\runner\Release"
+          $archive = "SmartStock-v2.0.1-Windows-x64.zip"
+          if (!(Test-Path $releaseDir -PathType Container)) {
+            throw "Windows release directory not found: $releaseDir"
+          }
+          if (!(Get-ChildItem $releaseDir -Filter *.exe)) { throw "Missing application executable." }
+          if (!(Test-Path "$releaseDir\flutter_windows.dll")) { throw "Missing Flutter runtime." }
+          if (!(Test-Path "$releaseDir\data" -PathType Container)) { throw "Missing application data." }
+          Compress-Archive -Path "$releaseDir\*" -DestinationPath $archive -Force
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartStock-v2.0.1-Windows-x64
+          path: SmartStock-v2.0.1-Windows-x64.zip
+          if-no-files-found: error
+
+      - name: Upload to existing v2.0.1 GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload v2.0.1 SmartStock-v2.0.1-Windows-x64.zip --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Release upload failed." }
