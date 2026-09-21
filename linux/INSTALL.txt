@@ -1,0 +1,15 @@
+SmartStock Linux
+
+Extract the entire archive, open a terminal in the extracted directory, and run:
+
+  ./install.sh
+
+Run as your normal user, without sudo. Then open SmartStock from your application
+menu. The installer copies the entire bundle under ~/.local/share/smartstock and
+installs the launcher and icons. It respects XDG_DATA_HOME when set. Close the
+running app before installing an updated bundle. Application data is not removed.
+
+You can also run ./smartstock_flutter directly from the extracted bundle.
+Keep lib/ and data/ beside the executable. This build was made on CachyOS x64;
+older distributions may not provide sufficiently recent system libraries.
+The app requires GTK 3, libsecret, and a running, unlocked Secret Service keyring.
