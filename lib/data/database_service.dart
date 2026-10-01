@@ -18,6 +18,13 @@ class CsvImportResult {
 }
 
 class DatabaseService {
+  DatabaseService();
+
+  /// Isolated SQLite connection for tests; never opens the user's database/keyring.
+  DatabaseService.forTesting(DatabaseFactory factory, String path)
+    : _factory = factory,
+      _path = path;
+
   static const int inventoryPageSize = 50;
   static const int auditPageSize = 100;
   static const int historyPageSize = 50;
@@ -36,6 +43,10 @@ class DatabaseService {
     bool sandbox = false,
     String? legacyPassphrase,
   }) async {
+    if (_factory != null && _crypto == null) {
+      await _open();
+      return;
+    }
     final info = await createSmartStockDatabaseFactory(sandbox: sandbox);
     _factory = info.factory;
     _path = info.path;
@@ -56,7 +67,7 @@ class DatabaseService {
         },
         onCreate: (database, version) async => _createSchema(database),
         onOpen: (database) async {
-          await _migrate(database);
+          await database.transaction(_migrate);
           await _seedCategories(database);
         },
       ),
@@ -107,7 +118,7 @@ class DatabaseService {
     await _seedCategories(database);
   }
 
-  Future<void> _migrate(Database database) async {
+  Future<void> _migrate(DatabaseExecutor database) async {
     final ledgerInfo = await database.rawQuery(
       'PRAGMA table_info(InventoryLedger)',
     );
@@ -121,6 +132,20 @@ class DatabaseService {
       await database.execute(
         'ALTER TABLE InventoryLedger ADD COLUMN SupplierID INTEGER',
       );
+    }
+
+    // Nullable snapshots deliberately leave pre-migration history unknown.
+    for (final column in {
+      'QuantityBefore': 'INTEGER',
+      'QuantityAfter': 'INTEGER',
+      'SkuSnapshot': 'TEXT',
+      'Notes': 'TEXT',
+    }.entries) {
+      if (!ledgerCols.contains(column.key)) {
+        await database.execute(
+          'ALTER TABLE InventoryLedger ADD COLUMN ${column.key} ${column.value}',
+        );
+      }
     }
 
     final itemInfo = await database.rawQuery('PRAGMA table_info(Item)');
@@ -162,6 +187,7 @@ class DatabaseService {
     'RESTOCK',
     'DISPENSE',
     'ROLLBACK_REVERSAL',
+    'DELETE',
   };
 
   Future<void> _writeLedger(
@@ -171,6 +197,9 @@ class DatabaseService {
     required double priceSnapshot,
     required String changeType,
     required String itemName,
+    required int quantityBefore,
+    required int quantityAfter,
+    String notes = '',
   }) async {
     if (!_validChangeTypes.contains(changeType)) {
       throw ArgumentError.value(
@@ -179,12 +208,27 @@ class DatabaseService {
         'Unknown inventory ledger change type',
       );
     }
+    if (quantityBefore < 0 ||
+        quantityAfter < 0 ||
+        quantityBefore + deltaQuantity != quantityAfter) {
+      throw StateError('Invalid stock transaction quantities.');
+    }
+    final item = await executor.query(
+      'Item',
+      columns: ['SKU'],
+      where: 'ItemID=?',
+      whereArgs: [itemId],
+    );
     await executor.insert('InventoryLedger', {
       'ItemID': itemId,
       'ItemNameSnapshot': itemName,
       'DeltaQuantity': deltaQuantity,
       'PriceSnapshot': priceSnapshot,
       'ChangeType': changeType,
+      'QuantityBefore': quantityBefore,
+      'QuantityAfter': quantityAfter,
+      'SkuSnapshot': item.single['SKU'],
+      'Notes': notes,
     });
   }
 
@@ -259,6 +303,16 @@ class DatabaseService {
     return rows.map(InventoryItem.fromMap).toList();
   }
 
+  Future<InventoryItem?> findItemById(int id) async {
+    final rows = await db.rawQuery(
+      'SELECT Item.ItemID, Item.SKU, Item.ItemName, Category.CategoryName, '
+      'Item.Quantity, Item.UnitPrice, Item.ReorderLevel '
+      'FROM Item JOIN Category ON Item.CategoryID=Category.CategoryID WHERE Item.ItemID=?',
+      [id],
+    );
+    return rows.isEmpty ? null : InventoryItem.fromMap(rows.first);
+  }
+
   Future<InventoryItem?> findItemBySku(String sku) async {
     final rows = await db.rawQuery(
       'SELECT Item.ItemID, Item.SKU, Item.ItemName, Category.CategoryName, '
@@ -296,9 +350,12 @@ class DatabaseService {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw ArgumentError('Item name cannot be empty.');
     if (quantity < 0) throw ArgumentError('Quantity cannot be negative.');
-    if (unitPrice < 0) throw ArgumentError('Unit price cannot be negative.');
-    if (reorderLevel < 0)
+    if (!unitPrice.isFinite || unitPrice < 0) {
+      throw ArgumentError('Unit price must be finite and non-negative.');
+    }
+    if (reorderLevel < 0) {
       throw ArgumentError('Reorder level cannot be negative.');
+    }
     return db.transaction((txn) async {
       final categoryId = await _categoryId(txn, category);
       final sku = generateSku();
@@ -317,6 +374,8 @@ class DatabaseService {
         priceSnapshot: unitPrice,
         changeType: 'CREATE',
         itemName: trimmed,
+        quantityBefore: 0,
+        quantityAfter: quantity,
       );
       return itemId;
     });
@@ -333,6 +392,12 @@ class DatabaseService {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw ArgumentError('Item name cannot be empty.');
     if (quantity < 0) throw ArgumentError('Quantity cannot be negative.');
+    if (!unitPrice.isFinite || unitPrice < 0) {
+      throw ArgumentError('Unit price must be finite and non-negative.');
+    }
+    if (reorderLevel < 0) {
+      throw ArgumentError('Reorder level cannot be negative.');
+    }
     await db.transaction((txn) async {
       final old = await txn.rawQuery(
         'SELECT Quantity, UnitPrice FROM Item WHERE ItemID=?',
@@ -363,18 +428,57 @@ class DatabaseService {
           priceSnapshot: unitPrice,
           changeType: 'MANUAL_EDIT',
           itemName: trimmed,
+          quantityBefore: oldQuantity,
+          quantityAfter: quantity,
         );
       }
     });
   }
 
   Future<void> deleteItem(int itemId) =>
-      db.delete('Item', where: 'ItemID=?', whereArgs: [itemId]);
+      db.transaction((txn) => _deleteItem(txn, itemId));
+
+  Future<void> _deleteItem(DatabaseExecutor txn, int itemId) async {
+    final rows = await txn.query(
+      'Item',
+      where: 'ItemID=?',
+      whereArgs: [itemId],
+    );
+    if (rows.isEmpty) throw StateError('Item no longer exists.');
+    final item = rows.single;
+    final quantity = (item['Quantity'] as num?)?.toInt() ?? 0;
+    // Preserve available identity for older records before their item disappears.
+    await txn.rawUpdate(
+      'UPDATE InventoryLedger SET ItemNameSnapshot=COALESCE(ItemNameSnapshot, ?), '
+      'SkuSnapshot=COALESCE(SkuSnapshot, ?) WHERE ItemID=?',
+      [item['ItemName'], item['SKU'], itemId],
+    );
+    await _writeLedger(
+      txn,
+      itemId: itemId,
+      deltaQuantity: -quantity,
+      priceSnapshot: (item['UnitPrice'] as num?)?.toDouble() ?? 0,
+      changeType: 'DELETE',
+      itemName: (item['ItemName'] ?? '').toString(),
+      quantityBefore: quantity,
+      quantityAfter: 0,
+      notes: 'Item deleted from inventory; $quantity unit(s) removed.',
+    );
+    // Explicitly detach history, including on imported schemas with CASCADE.
+    await txn.update(
+      'InventoryLedger',
+      {'ItemID': null},
+      where: 'ItemID=?',
+      whereArgs: [itemId],
+    );
+    await txn.delete('Item', where: 'ItemID=?', whereArgs: [itemId]);
+  }
 
   Future<void> adjustStock({
     required int itemId,
     required int amount,
     required bool restock,
+    String notes = '',
   }) async {
     if (amount <= 0) throw ArgumentError('Amount must be greater than zero.');
     await db.transaction((txn) async {
@@ -401,6 +505,9 @@ class DatabaseService {
         priceSnapshot: price,
         changeType: restock ? 'RESTOCK' : 'DISPENSE',
         itemName: name,
+        quantityBefore: current,
+        quantityAfter: current + delta,
+        notes: notes.trim(),
       );
     });
   }
@@ -493,7 +600,7 @@ class DatabaseService {
           throw FormatException(
             'Row $rowNumber: Quantity must be a non-negative integer.',
           );
-        if (price == null || price < 0)
+        if (price == null || !price.isFinite || price < 0)
           throw FormatException(
             'Row $rowNumber: UnitPrice must be a non-negative number.',
           );
@@ -527,6 +634,8 @@ class DatabaseService {
           priceSnapshot: price,
           changeType: 'CSV_IMPORT',
           itemName: name,
+          quantityBefore: 0,
+          quantityAfter: quantity,
         );
         imported++;
         existing.add(name);
@@ -537,7 +646,7 @@ class DatabaseService {
 
   Future<List<String>> getAuditItemNames() async {
     final rows = await db.rawQuery('''
-      SELECT DISTINCT COALESCE(i.ItemName, il.ItemNameSnapshot, '[Deleted Item]') AS ItemName
+      SELECT DISTINCT COALESCE(il.ItemNameSnapshot, i.ItemName, '[Deleted Item]') AS ItemName
       FROM InventoryLedger il LEFT JOIN Item i ON il.ItemID=i.ItemID
       ORDER BY ItemName
     ''');
@@ -549,7 +658,7 @@ class DatabaseService {
     final args = <Object?>[];
     if (filter.itemName != null && filter.itemName!.isNotEmpty) {
       clauses.add(
-        "COALESCE(i.ItemName, il.ItemNameSnapshot, '[Deleted Item]') = ?",
+        "COALESCE(il.ItemNameSnapshot, i.ItemName, '[Deleted Item]') = ?",
       );
       args.add(filter.itemName);
     }
@@ -567,6 +676,23 @@ class DatabaseService {
     );
   }
 
+  static const _ledgerProjection = """
+    il.LedgerID, il.Timestamp,
+    COALESCE(il.ItemNameSnapshot, i.ItemName, '[Deleted Item]') AS ItemName,
+    COALESCE(il.SkuSnapshot, i.SKU, '—') AS SKU,
+    il.ChangeType, il.DeltaQuantity, il.PriceSnapshot,
+    il.QuantityBefore, il.QuantityAfter, il.Notes
+  """;
+  static const _ledgerFrom =
+      ' FROM InventoryLedger il LEFT JOIN Item i ON il.ItemID=i.ItemID';
+
+  Future<List<LedgerEntry>> getReportTransactions() async {
+    final rows = await db.rawQuery(
+      'SELECT $_ledgerProjection $_ledgerFrom ORDER BY il.LedgerID',
+    );
+    return rows.map(LedgerEntry.fromMap).toList();
+  }
+
   Future<LedgerPage> getAuditPage({
     required AuditFilter filter,
     int page = 0,
@@ -580,15 +706,7 @@ class DatabaseService {
         ) ??
         0;
     final rows = await db.rawQuery(
-      '''SELECT il.LedgerID AS LedgerID, il.Timestamp AS Timestamp,
-      COALESCE(i.ItemName, il.ItemNameSnapshot, '[Deleted Item]') AS ItemName,
-      COALESCE(i.SKU, '—') AS SKU, il.ChangeType AS ChangeType,
-      il.DeltaQuantity AS DeltaQuantity, il.PriceSnapshot AS PriceSnapshot,
-      SUM(il.DeltaQuantity) OVER (
-        PARTITION BY il.ItemID ORDER BY il.LedgerID
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-      ) AS RunningBalance
-      $from${where.sql}
+      '''SELECT $_ledgerProjection $from${where.sql}
       ORDER BY il.LedgerID DESC LIMIT ? OFFSET ?''',
       [...where.args, auditPageSize, page * auditPageSize],
     );
@@ -603,15 +721,7 @@ class DatabaseService {
     const from =
         ' FROM InventoryLedger il LEFT JOIN Item i ON il.ItemID=i.ItemID';
     final rows = await db.rawQuery(
-      '''SELECT il.LedgerID AS LedgerID, il.Timestamp AS Timestamp,
-      COALESCE(i.ItemName, il.ItemNameSnapshot, '[Deleted Item]') AS ItemName,
-      COALESCE(i.SKU, '—') AS SKU, il.ChangeType AS ChangeType,
-      il.DeltaQuantity AS DeltaQuantity, il.PriceSnapshot AS PriceSnapshot,
-      SUM(il.DeltaQuantity) OVER (
-        PARTITION BY il.ItemID ORDER BY il.LedgerID
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-      ) AS RunningBalance
-      $from${where.sql} ORDER BY il.LedgerID''',
+      '''SELECT $_ledgerProjection $from${where.sql} ORDER BY il.LedgerID''',
       where.args,
     );
     return rows.map(LedgerEntry.fromMap).toList();
@@ -637,14 +747,8 @@ class DatabaseService {
     final total = ((stats.first['Total'] ?? 0) as num).toInt();
     final rows = await db.rawQuery(
       '''
-      SELECT LedgerID, Timestamp, '' AS ItemName, '' AS SKU, ChangeType,
-             DeltaQuantity, PriceSnapshot,
-             SUM(DeltaQuantity) OVER (
-               PARTITION BY ItemID ORDER BY LedgerID
-               ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-             ) AS RunningBalance
-      FROM InventoryLedger WHERE ItemID=?
-      ORDER BY LedgerID DESC LIMIT ? OFFSET ?
+      SELECT $_ledgerProjection $_ledgerFrom WHERE il.ItemID=?
+      ORDER BY il.LedgerID DESC LIMIT ? OFFSET ?
     ''',
       [itemId, historyPageSize, page * historyPageSize],
     );
@@ -660,13 +764,7 @@ class DatabaseService {
   Future<List<LedgerEntry>> getAllItemHistory(int itemId) async {
     final rows = await db.rawQuery(
       '''
-      SELECT LedgerID, Timestamp, '' AS ItemName, '' AS SKU, ChangeType,
-             DeltaQuantity, PriceSnapshot,
-             SUM(DeltaQuantity) OVER (
-               PARTITION BY ItemID ORDER BY LedgerID
-               ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-             ) AS RunningBalance
-      FROM InventoryLedger WHERE ItemID=? ORDER BY LedgerID
+      SELECT $_ledgerProjection $_ledgerFrom WHERE il.ItemID=? ORDER BY il.LedgerID
     ''',
       [itemId],
     );
@@ -719,6 +817,9 @@ class DatabaseService {
         priceSnapshot: price,
         changeType: 'ROLLBACK_REVERSAL',
         itemName: itemName,
+        quantityBefore: current,
+        quantityAfter: projected,
+        notes: 'Reversal of ledger #$ledgerId',
       );
     });
   }
@@ -760,7 +861,12 @@ class DatabaseService {
   Future<void> deleteSupplier(int id) =>
       db.delete('Supplier', where: 'SupplierID=?', whereArgs: [id]);
 
-  Future<void> resetInventory() => db.delete('Item');
+  Future<void> resetInventory() => db.transaction((txn) async {
+    final items = await txn.query('Item', columns: ['ItemID']);
+    for (final item in items) {
+      await _deleteItem(txn, (item['ItemID'] as num).toInt());
+    }
+  });
 
   Future<List<int>> backupBytes() async {
     await db.rawQuery('PRAGMA wal_checkpoint(FULL)');

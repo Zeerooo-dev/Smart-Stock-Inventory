@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.smartstock" "\0"
-            VALUE "FileDescription", "smartstock_flutter" "\0"
+            VALUE "FileDescription", "SmartStock" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "smartstock_flutter" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.smartstock. All rights reserved." "\0"
             VALUE "OriginalFilename", "smartstock_flutter.exe" "\0"
-            VALUE "ProductName", "smartstock_flutter" "\0"
+            VALUE "ProductName", "SmartStock" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

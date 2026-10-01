@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
-
 import '../../core/app_theme.dart';
 import '../../state/smartstock_controller.dart';
 import '../widgets/dialogs.dart';
+import '../widgets/stock_widgets.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.controller});
   final SmartStockController controller;
-
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final _category = TextEditingController();
-  final _hex = TextEditingController();
-  String? _selectedCategory;
-
+  final _category = TextEditingController(), _hex = TextEditingController();
+  String _categorySearch = '';
+  String? _hexError;
+  SmartStockTheme _light = SmartStockTheme.defaultLight,
+      _dark = SmartStockTheme.dark;
   @override
   void dispose() {
     _category.dispose();
@@ -24,565 +24,287 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
-  void _error(Object e) {
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+  bool get _isDark =>
+      widget.controller.theme == SmartStockTheme.dark ||
+      widget.controller.theme == SmartStockTheme.blueSteel;
+  void _theme(SmartStockTheme next) {
+    final accent = widget.controller.customAccent;
+    if (_isDark) {
+      _dark = widget.controller.theme;
+    } else {
+      _light = widget.controller.theme;
     }
+    widget.controller.applyTheme(next);
+    if (accent != null) widget.controller.setAccent(accent);
   }
 
-  Color? _parseHex(String raw) {
-    final value = raw.trim().replaceFirst('#', '');
-    if (!RegExp(r'^[0-9A-Fa-f]{6}$').hasMatch(value)) return null;
-    return Color(int.parse('FF$value', radix: 16));
+  void _applyHex() {
+    final raw = _hex.text.trim().replaceFirst('#', '');
+    if (!RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(raw)) {
+      setState(() => _hexError = 'Enter a six-digit color, such as #2457C5.');
+      return;
+    }
+    setState(() => _hexError = null);
+    widget.controller.setAccent(Color(int.parse('FF$raw', radix: 16)));
   }
 
-  String _toHex(Color color) {
-    final value = color.toARGB32() & 0xFFFFFF;
-    return '#${value.toRadixString(16).padLeft(6, '0').toUpperCase()}';
-  }
-
-  Future<void> _pickAccent() async {
-    final initial =
-        widget.controller.customAccent ?? Theme.of(context).colorScheme.primary;
-    final picked = await showDialog<Color>(
+  Future<void> _pick() async {
+    final color = await showDialog<Color>(
       context: context,
-      builder: (_) => _RgbPicker(initial: initial),
+      builder: (_) => _RgbPicker(
+        initial:
+            widget.controller.customAccent ??
+            Theme.of(context).colorScheme.primary,
+      ),
     );
-    if (picked != null) {
-      _hex.text = _toHex(picked);
-      widget.controller.setAccent(picked);
-      setState(() {});
-    }
-  }
-
-  Future<void> _resetInventory() async {
-    final first = await showSmartConfirm(
-      context,
-      title: 'Reset All Inventory',
-      message:
-          'WARNING\n\nThis will permanently delete every inventory item.\nCategories will be kept.',
-      confirmLabel: 'Continue',
-    );
-    if (!first || !mounted) return;
-    final second = await showSmartConfirm(
-      context,
-      title: 'Final Confirmation',
-      message:
-          'This is the final confirmation. Delete all inventory items now?',
-      confirmLabel: 'Reset All Data',
-    );
-    if (!second) return;
-    try {
-      await widget.controller.resetInventory();
-    } catch (e) {
-      _error(e);
+    if (color != null && mounted) {
+      _hex.text =
+          '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+      setState(() => _hexError = null);
+      widget.controller.setAccent(color);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 600;
-        final expanded = constraints.maxWidth >= 1100;
-        final padding = expanded
-            ? 28.0
-            : compact
-            ? 12.0
-            : 18.0;
-
-        return ListView(
-          padding: EdgeInsets.all(padding),
+    final controller = widget.controller;
+    final categories = controller.categories
+        .where((c) => c.name.toLowerCase().contains(_categorySearch))
+        .toList();
+    return ListView(
+      key: const PageStorageKey('settings-scroll'),
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Settings', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 16),
+        _Section(
+          title: 'Data and backup',
           children: [
-            Text(
-              'System Settings',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+            const Text(
+              'Save a backup before replacing your inventory database.',
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Manage data, appearance, categories, and local storage.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 20),
-            _SectionCard(
-              title: 'Data & Backup',
-              subtitle:
-                  'Local SQLite storage, backups, and migration from the PyQt edition.',
-              child: _DataActions(
-                controller: widget.controller,
-                compact: compact,
-                onError: _error,
-              ),
-            ),
-            const SizedBox(height: 18),
-            _SectionCard(
-              title: 'Appearance',
-              subtitle: 'Material 3 themes and optional custom accent color.',
-              child: _appearance(context, compact: compact),
-            ),
-            const SizedBox(height: 18),
-            _SectionCard(
-              title: 'Category Management',
-              subtitle:
-                  'Add warehouse categories or remove categories that are no longer used.',
-              child: _categories(context, compact: compact),
-            ),
-            const SizedBox(height: 18),
-            _dangerZone(context, compact: compact),
-            const SizedBox(height: 32),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _appearance(BuildContext context, {required bool compact}) {
-    return LayoutBuilder(
-      builder: (context, box) {
-        final oneColumn = compact || box.maxWidth < 620;
-        final fieldWidth = oneColumn ? box.maxWidth : (box.maxWidth - 12) / 2;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                SizedBox(
-                  width: fieldWidth,
-                  child: DropdownButtonFormField<SmartStockTheme>(
-                    initialValue: widget.controller.theme,
-                    key: ValueKey(widget.controller.theme),
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Theme',
-                      prefixIcon: Icon(Icons.style_outlined),
-                    ),
-                    items: SmartStockTheme.values
-                        .map(
-                          (theme) => DropdownMenuItem(
-                            value: theme,
-                            child: Text(
-                              theme.label,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        widget.controller.applyTheme(value);
-                        _hex.clear();
-                      }
-                    },
-                  ),
-                ),
-                SizedBox(
-                  width: fieldWidth,
-                  child: SwitchListTile.adaptive(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    title: const Text('Dark Mode'),
-                    subtitle: const Text('Use the dark SmartStock palette'),
-                    value: widget.controller.theme == SmartStockTheme.dark,
-                    onChanged: (enabled) {
-                      widget.controller.applyTheme(
-                        enabled
-                            ? SmartStockTheme.dark
-                            : SmartStockTheme.defaultLight,
-                      );
-                      _hex.clear();
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                SizedBox(
-                  width: oneColumn ? box.maxWidth : 220,
-                  child: TextField(
-                    controller: _hex,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      labelText: 'Accent Hex',
-                      hintText: '#2563EB',
-                      prefixIcon: Icon(Icons.tag),
-                    ),
-                    onSubmitted: (value) {
-                      final color = _parseHex(value);
-                      if (color == null) {
-                        _error('Enter a six-digit hex color such as #2563EB.');
-                      } else {
-                        widget.controller.setAccent(color);
-                      }
-                    },
-                  ),
-                ),
-                if (oneColumn)
-                  SizedBox(
-                    width: box.maxWidth,
-                    child: FilledButton.tonalIcon(
-                      onPressed: _pickAccent,
-                      icon: const Icon(Icons.palette_outlined),
-                      label: const Text('Pick Accent Color'),
-                    ),
-                  )
-                else
-                  FilledButton.tonalIcon(
-                    onPressed: _pickAccent,
-                    icon: const Icon(Icons.palette_outlined),
-                    label: const Text('Pick Accent Color'),
-                  ),
-                if (oneColumn)
-                  SizedBox(
-                    width: box.maxWidth,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        _hex.clear();
-                        widget.controller.setAccent(null);
-                      },
-                      icon: const Icon(Icons.restart_alt),
-                      label: const Text('Reset Accent'),
-                    ),
-                  )
-                else
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      _hex.clear();
-                      widget.controller.setAccent(null);
-                    },
-                    icon: const Icon(Icons.restart_alt),
-                    label: const Text('Reset Accent'),
-                  ),
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color:
-                        widget.controller.customAccent ??
-                        Theme.of(context).colorScheme.primary,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _categories(BuildContext context, {required bool compact}) {
-    return LayoutBuilder(
-      builder: (context, box) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (compact || box.maxWidth < 560) ...[
-              TextField(
-                controller: _category,
-                decoration: const InputDecoration(
-                  labelText: 'New Category',
-                  prefixIcon: Icon(Icons.category_outlined),
-                ),
-              ),
-              const SizedBox(height: 10),
-              FilledButton.tonalIcon(
-                onPressed: _addCategory,
-                icon: const Icon(Icons.add),
-                label: const Text('Add Category'),
-              ),
-            ] else
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _category,
-                      decoration: const InputDecoration(
-                        labelText: 'New Category',
-                        prefixIcon: Icon(Icons.category_outlined),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  FilledButton.tonalIcon(
-                    onPressed: _addCategory,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Category'),
-                  ),
-                ],
-              ),
-            const SizedBox(height: 14),
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: widget.controller.categories.map((cat) {
-                final selected = _selectedCategory == cat.name;
-                return ChoiceChip(
-                  label: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 190),
-                    child: Text(
-                      cat.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  selected: selected,
-                  onSelected: (_) => setState(
-                    () => _selectedCategory = selected ? null : cat.name,
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 12),
-            if (compact)
-              OutlinedButton.icon(
-                onPressed: _selectedCategory == null
-                    ? null
-                    : _removeSelectedCategory,
-                icon: const Icon(Icons.remove_circle_outline),
-                label: const Text('Remove Selected Category'),
-              )
-            else
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: _selectedCategory == null
-                      ? null
-                      : _removeSelectedCategory,
-                  icon: const Icon(Icons.remove_circle_outline),
-                  label: const Text('Remove Selected Category'),
+              children: [
+                TaskButton(
+                  label: 'Backup Database',
+                  icon: Icons.backup_outlined,
+                  savedFile: true,
+                  action: controller.backupDatabase,
                 ),
+                TaskButton(
+                  label: 'Import Legacy .db',
+                  icon: Icons.move_to_inbox_outlined,
+                  action: () async {
+                    if (!await showSmartConfirm(
+                      context,
+                      title: 'Replace database?',
+                      confirmLabel: 'Choose database',
+                      destructive: false,
+                      message:
+                          'Choose a plaintext SmartStock backup. It replaces the current database, including inventory, suppliers, and audit history.',
+                    )) {
+                      return null;
+                    }
+                    if (!context.mounted) return null;
+                    final imported = await controller.importLegacyDatabase();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            imported
+                                ? 'Database imported.'
+                                : 'Import cancelled.',
+                          ),
+                        ),
+                      );
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+            const Text(
+              'Database encryption is applied after a clean shutdown.',
+            ),
+          ],
+        ),
+        _Section(
+          title: 'Appearance',
+          children: [
+            const Text(
+              'Appearance choices last for this app session. Very light or dark accents are adjusted for readable text.',
+            ),
+            DropdownButtonFormField<SmartStockTheme>(
+              initialValue: controller.theme,
+              key: ValueKey(controller.theme),
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Theme'),
+              items: SmartStockTheme.values
+                  .map((t) => DropdownMenuItem(value: t, child: Text(t.label)))
+                  .toList(),
+              onChanged: (t) {
+                if (t != null) _theme(t);
+              },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Dark mode'),
+              value: _isDark,
+              onChanged: (dark) => _theme(dark ? _dark : _light),
+            ),
+            TextField(
+              controller: _hex,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(
+                labelText: 'Accent color',
+                hintText: '#2457C5',
+                errorText: _hexError,
+              ),
+              onSubmitted: (_) => _applyHex(),
+            ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton(
+                  onPressed: _applyHex,
+                  child: const Text('Apply accent'),
+                ),
+                OutlinedButton(
+                  onPressed: _pick,
+                  child: const Text('Pick color'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    _hex.clear();
+                    setState(() => _hexError = null);
+                    controller.setAccent(null);
+                  },
+                  child: const Text('Reset accent'),
+                ),
+              ],
+            ),
+          ],
+        ),
+        _Section(
+          title: 'Categories',
+          children: [
+            TextField(
+              controller: _category,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(labelText: 'New Category'),
+            ),
+            TaskButton(
+              label: 'Add Category',
+              icon: Icons.add,
+              action: () async {
+                if (_category.text.trim().isEmpty) {
+                  throw ArgumentError('Enter a category name.');
+                }
+                await controller.addCategory(_category.text.trim());
+                if (mounted) _category.clear();
+                return null;
+              },
+            ),
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Search categories',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (value) =>
+                  setState(() => _categorySearch = value.trim().toLowerCase()),
+            ),
+            if (categories.isEmpty) const Text('No matching categories.'),
+            for (final category in categories)
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(category.name),
+                  TaskButton(
+                    label: 'Remove ${category.name}',
+                    icon: Icons.remove_circle_outline,
+                    action: () async {
+                      if (!await showSmartConfirm(
+                        context,
+                        title: 'Remove category',
+                        message:
+                            "Remove '${category.name}'? Categories still used by inventory cannot be removed.",
+                        confirmLabel: 'Remove',
+                      )) {
+                        return null;
+                      }
+                      await controller.removeCategory(category.name);
+                      return null;
+                    },
+                  ),
+                ],
               ),
           ],
-        );
-      },
-    );
-  }
-
-  Future<void> _addCategory() async {
-    try {
-      await widget.controller.addCategory(_category.text);
-      _category.clear();
-    } catch (e) {
-      _error(e);
-    }
-  }
-
-  Future<void> _removeSelectedCategory() async {
-    final name = _selectedCategory;
-    if (name == null) return;
-    final ok = await showSmartConfirm(
-      context,
-      message: "Remove category '$name'?",
-      confirmLabel: 'Remove',
-    );
-    if (!ok) return;
-    try {
-      await widget.controller.removeCategory(name);
-      setState(() => _selectedCategory = null);
-    } catch (e) {
-      _error(e);
-    }
-  }
-
-  Widget _dangerZone(BuildContext context, {required bool compact}) {
-    final scheme = Theme.of(context).colorScheme;
-    final message = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Danger Zone',
-          style: TextStyle(fontWeight: FontWeight.bold, color: scheme.error),
         ),
-        const SizedBox(height: 3),
-        const Text(
-          'Reset All Data deletes all inventory items while preserving the category list.',
+        _Section(
+          title: 'Clear inventory',
+          children: [
+            const Text(
+              'Deletes every inventory item and records each deletion in the Audit Log. Categories, suppliers, and existing audit history are kept.',
+            ),
+            TaskButton(
+              label: 'Clear inventory',
+              icon: Icons.delete_forever,
+              action: () async {
+                if (!await showSmartConfirm(
+                  context,
+                  title: 'Clear inventory?',
+                  message:
+                      'Delete every inventory item? Categories, suppliers, and audit history are kept. Each deletion is recorded.',
+                  confirmLabel: 'Continue',
+                )) {
+                  return null;
+                }
+                if (!context.mounted) return null;
+                if (!await showSmartConfirm(
+                  context,
+                  title: 'Delete all inventory items?',
+                  message:
+                      'This removes all current stock items. Make sure you have a backup you can restore.',
+                  confirmLabel: 'Clear inventory',
+                )) {
+                  return null;
+                }
+                await controller.resetInventory();
+                return null;
+              },
+            ),
+          ],
         ),
       ],
     );
-
-    return Card(
-      color: scheme.errorContainer.withValues(alpha: .35),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: scheme.error.withValues(alpha: .35)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: compact
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.warning_amber_rounded, color: scheme.error),
-                      const SizedBox(width: 12),
-                      Expanded(child: message),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: scheme.error,
-                      foregroundColor: scheme.onError,
-                    ),
-                    onPressed: _resetInventory,
-                    icon: const Icon(Icons.delete_forever),
-                    label: const Text('Reset All Data'),
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, color: scheme.error),
-                  const SizedBox(width: 12),
-                  Expanded(child: message),
-                  const SizedBox(width: 16),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: scheme.error,
-                      foregroundColor: scheme.onError,
-                    ),
-                    onPressed: _resetInventory,
-                    icon: const Icon(Icons.delete_forever),
-                    label: const Text('Reset All Data'),
-                  ),
-                ],
-              ),
-      ),
-    );
   }
 }
 
-class _DataActions extends StatelessWidget {
-  const _DataActions({
-    required this.controller,
-    required this.compact,
-    required this.onError,
-  });
-  final SmartStockController controller;
-  final bool compact;
-  final ValueChanged<Object> onError;
-
-  @override
-  Widget build(BuildContext context) {
-    final backup = FilledButton.icon(
-      onPressed: () async {
-        try {
-          await controller.backupDatabase();
-        } catch (e) {
-          onError(e);
-        }
-      },
-      icon: const Icon(Icons.backup_outlined),
-      label: const Text('Backup Database'),
-    );
-    final import = OutlinedButton.icon(
-      onPressed: () async {
-        final ok = await showSmartConfirm(
-          context,
-          destructive: false,
-          title: 'Import Legacy Database',
-          message:
-              'Choose a plaintext SmartStock .db backup from the PyQt version. The current Flutter database will be replaced.',
-          confirmLabel: 'Choose Database',
-        );
-        if (!ok) return;
-        try {
-          await controller.importLegacyDatabase();
-        } catch (e) {
-          onError(e);
-        }
-      },
-      icon: const Icon(Icons.move_to_inbox_outlined),
-      label: const Text('Import Legacy .db'),
-    );
-
-    if (compact) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          backup,
-          const SizedBox(height: 10),
-          import,
-          const SizedBox(height: 12),
-          const _EncryptionNote(),
-        ],
-      );
-    }
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [backup, import, const _EncryptionNote()],
-    );
-  }
-}
-
-class _EncryptionNote extends StatelessWidget {
-  const _EncryptionNote();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: const Wrap(
-      spacing: 6,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Icon(Icons.lock_outline, size: 18),
-        Text('Encrypted at rest after clean shutdown'),
-      ],
-    ),
-  );
-}
-
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.title,
-    required this.subtitle,
-    required this.child,
-  });
+class _Section extends StatelessWidget {
+  const _Section({required this.title, required this.children});
   final String title;
-  final String subtitle;
-  final Widget child;
-
+  final List<Widget> children;
   @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 3),
-          Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 16),
-          child,
-        ],
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 16),
+    child: Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            for (final child in children) ...[
+              const SizedBox(height: 12),
+              child,
+            ],
+          ],
+        ),
       ),
     ),
   );
@@ -591,37 +313,32 @@ class _SectionCard extends StatelessWidget {
 class _RgbPicker extends StatefulWidget {
   const _RgbPicker({required this.initial});
   final Color initial;
-
   @override
   State<_RgbPicker> createState() => _RgbPickerState();
 }
 
 class _RgbPickerState extends State<_RgbPicker> {
-  late double r = widget.initial.r * 255;
-  late double g = widget.initial.g * 255;
-  late double b = widget.initial.b * 255;
-
-  Color get color => Color.fromARGB(255, r.round(), g.round(), b.round());
-
+  late double _r = widget.initial.r * 255,
+      _g = widget.initial.g * 255,
+      _b = widget.initial.b * 255;
+  Color get _color => Color.fromARGB(255, _r.round(), _g.round(), _b.round());
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Pick Accent Color'),
-    content: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 420),
+    scrollable: true,
+    title: const Text('Pick accent color'),
+    content: SizedBox(
+      width: 400,
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            height: 70,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(12),
-            ),
+          Semantics(
+            label: 'Selected color preview',
+            child: Container(height: 48, color: _color),
           ),
-          const SizedBox(height: 12),
-          _slider('Red', r, (v) => setState(() => r = v)),
-          _slider('Green', g, (v) => setState(() => g = v)),
-          _slider('Blue', b, (v) => setState(() => b = v)),
+          _slider('Red', _r, (v) => setState(() => _r = v)),
+          _slider('Green', _g, (v) => setState(() => _g = v)),
+          _slider('Blue', _b, (v) => setState(() => _b = v)),
         ],
       ),
     ),
@@ -631,30 +348,26 @@ class _RgbPickerState extends State<_RgbPicker> {
         child: const Text('Cancel'),
       ),
       FilledButton(
-        onPressed: () => Navigator.pop(context, color),
-        child: const Text('Apply'),
+        onPressed: () => Navigator.pop(context, _color),
+        child: const Text('Use color'),
       ),
     ],
   );
-
   Widget _slider(String label, double value, ValueChanged<double> onChanged) =>
       Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-              const Spacer(),
-              Text('${value.round()}'),
-            ],
-          ),
-          Slider(
-            value: value,
-            min: 0,
-            max: 255,
-            divisions: 255,
-            label: '${value.round()}',
-            onChanged: onChanged,
+          Text('$label: ${value.round()}'),
+          Semantics(
+            label: label,
+            child: Slider(
+              value: value,
+              min: 0,
+              max: 255,
+              divisions: 255,
+              semanticFormatterCallback: (v) => '$label ${v.round()} of 255',
+              onChanged: onChanged,
+            ),
           ),
         ],
       );

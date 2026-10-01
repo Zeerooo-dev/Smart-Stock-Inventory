@@ -1,132 +1,499 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:barcode_widget/barcode_widget.dart';
 import 'package:intl/intl.dart';
-
+import '../../core/app_theme.dart';
 import '../../data/database_service.dart';
 import '../../models/models.dart';
 import '../../state/smartstock_controller.dart';
+import 'stock_widgets.dart';
 
 Future<bool> showSmartConfirm(
   BuildContext context, {
   required String message,
-  String title = 'Confirm Action',
-  String confirmLabel = 'OK',
+  String title = 'Confirm deletion',
+  String confirmLabel = 'Delete',
   bool destructive = true,
-}) async {
-  final result = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      constraints: const BoxConstraints(maxWidth: 420),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-      title: Row(
-        children: [
-          Icon(
-            destructive ? Icons.warning_amber_rounded : Icons.help_outline,
-            color: destructive
-                ? Theme.of(context).colorScheme.error
-                : Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-          ),
-          IconButton(
+}) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: Text(title),
+        content: Text(
+          '$message${destructive ? '\n\nThis cannot be undone.' : ''}',
+        ),
+        actions: [
+          OutlinedButton(
             onPressed: () => Navigator.pop(context, false),
-            icon: const Icon(Icons.close),
-            tooltip: 'Close',
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: destructive
+                ? FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                    foregroundColor: Theme.of(context).colorScheme.onError,
+                  )
+                : null,
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(confirmLabel),
           ),
         ],
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: destructive
-                  ? Theme.of(context).colorScheme.errorContainer
-                  : Theme.of(context).colorScheme.primaryContainer,
-            ),
-            child: Icon(
-              destructive ? Icons.delete_outline : Icons.info_outline,
-              size: 30,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 8),
-          Text(
-            destructive
-                ? 'This action cannot be undone.'
-                : 'Please confirm to continue.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-      actions: [
-        OutlinedButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          style: destructive
-              ? FilledButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error,
-                  foregroundColor: Theme.of(context).colorScheme.onError,
-                )
-              : null,
-          onPressed: () => Navigator.pop(context, true),
-          child: Text(confirmLabel),
-        ),
-      ],
-    ),
-  );
-  return result ?? false;
+    ) ??
+    false;
+
+Future<void> showItemDetailsDialog(
+  BuildContext context,
+  InventoryItem item, {
+  required SmartStockController controller,
+}) => showDialog<void>(
+  context: context,
+  builder: (_) => ItemDetails(item: item, controller: controller),
+);
+
+class ItemDetails extends StatefulWidget {
+  const ItemDetails({
+    super.key,
+    required this.item,
+    required this.controller,
+    this.embedded = false,
+  });
+  final InventoryItem item;
+  final SmartStockController controller;
+  final bool embedded;
+  @override
+  State<ItemDetails> createState() => _ItemDetailsState();
 }
 
-Future<int?> showStockAmountDialog(
-  BuildContext context, {
+class _ItemDetailsState extends State<ItemDetails> {
+  late InventoryItem _item = widget.item;
+  bool _busy = false;
+  String? _error;
+  @override
+  void didUpdateWidget(covariant ItemDetails oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item != widget.item) _item = widget.item;
+  }
+
+  Future<void> _adjust(bool restock) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await adjustItemStock(
+        context,
+        widget.controller,
+        _item,
+        restock: restock,
+      );
+      final current = await widget.controller.database.findItemById(_item.id);
+      if (!mounted) return;
+      setState(() {
+        if (current != null) {
+          _item = current;
+        } else {
+          _error = 'This item no longer exists.';
+        }
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          _item.name,
+          style: Theme.of(
+            context,
+          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        Text(
+          'Current Quantity: ${_item.quantity}',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        Text('Stock Status: ${stockLabel(_item)}'),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: _busy ? null : () => _adjust(true),
+              icon: const Icon(Icons.add),
+              label: const Text('Restock'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : () => _adjust(false),
+              icon: const Icon(Icons.remove),
+              label: const Text('Dispense'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _busy
+                  ? null
+                  : () => showItemHistoryDialog(
+                      context,
+                      widget.controller,
+                      _item,
+                    ),
+              icon: const Icon(Icons.history),
+              label: const Text('View history'),
+            ),
+          ],
+        ),
+        if (_error != null)
+          Text(
+            _error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        const SizedBox(height: 16),
+        for (final field in <String, String>{
+          'SKU': displaySku(_item.sku),
+          'Category': _item.category,
+          'Unit Price': '₱${_item.unitPrice.toStringAsFixed(2)}',
+          'Inventory Value': '₱${_item.value.toStringAsFixed(2)}',
+          'Reorder Threshold': '${_item.reorderLevel}',
+          'Item ID': '${_item.id}',
+        }.entries)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SelectableText('${field.key}: ${field.value}'),
+          ),
+        if (_item.sku.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _Barcode(sku: _item.sku),
+          TextButton.icon(
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (context) => AlertDialog(
+                scrollable: true,
+                title: const Text('Barcode'),
+                content: SizedBox(
+                  width: 700,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InteractiveViewer(
+                        minScale: 1,
+                        maxScale: 5,
+                        child: _Barcode(sku: _item.sku),
+                      ),
+                      SelectableText(_item.sku),
+                      const Text('Pinch to enlarge.'),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            ),
+            icon: const Icon(Icons.zoom_in),
+            label: const Text('Enlarge barcode'),
+          ),
+        ],
+      ],
+    );
+    if (widget.embedded) {
+      return Card(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: content,
+        ),
+      );
+    }
+    return PopScope(
+      canPop: !_busy,
+      child: AlertDialog(
+        scrollable: true,
+        title: const Text('Item Details'),
+        content: SizedBox(width: 480, child: content),
+        actions: [
+          TextButton(
+            onPressed: _busy ? null : () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Barcode extends StatelessWidget {
+  const _Barcode({required this.sku});
+  final String sku;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Barcode for $sku',
+    image: true,
+    child: Container(
+      height: 110,
+      width: double.infinity,
+      color: StockColors.barcodeBackground,
+      padding: const EdgeInsets.all(12),
+      child: BarcodeWidget(
+        barcode: Barcode.code128(),
+        data: sku,
+        drawText: false,
+        color: StockColors.barcodeInk,
+        errorBuilder: (_, _) => const Text(
+          'Barcode unavailable.',
+          style: TextStyle(color: StockColors.barcodeInk),
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> adjustItemStock(
+  BuildContext context,
+  SmartStockController controller,
+  InventoryItem item, {
   required bool restock,
 }) async {
-  final controller = TextEditingController(text: '1');
-  return showDialog<int>(
-    context: context,
-    builder: (context) => AlertDialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      title: Text(restock ? 'Restock Item' : 'Dispense Item'),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: TextInputType.number,
-        decoration: InputDecoration(
-          labelText: restock ? 'Restock quantity' : 'Dispense quantity',
+  InventoryItem? current;
+  try {
+    current = await controller.database.findItemById(item.id);
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load this item: $error')),
+      );
+    }
+    return;
+  }
+  if (!context.mounted) return;
+  if (current == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('This item no longer exists.')),
+    );
+    return;
+  }
+  final latest = current;
+  await showStockAmountDialog(
+    context,
+    restock: restock,
+    item: latest,
+    onSubmit: (amount, notes) async {
+      await controller.adjustStock(
+        latest,
+        amount,
+        restock: restock,
+        notes: notes,
+      );
+    },
+  );
+}
+
+Future<({int amount, String notes})?> showStockAmountDialog(
+  BuildContext context, {
+  required bool restock,
+  InventoryItem? item,
+  Future<void> Function(int, String)? onSubmit,
+}) => showModalBottomSheet<({int amount, String notes})>(
+  context: context,
+  isScrollControlled: true,
+  useSafeArea: true,
+  isDismissible: false,
+  enableDrag: false,
+  builder: (_) =>
+      _StockAmountDialog(restock: restock, item: item, onSubmit: onSubmit),
+);
+
+class _StockAmountDialog extends StatefulWidget {
+  const _StockAmountDialog({required this.restock, this.item, this.onSubmit});
+  final bool restock;
+  final InventoryItem? item;
+  final Future<void> Function(int, String)? onSubmit;
+  @override
+  State<_StockAmountDialog> createState() => _StockAmountDialogState();
+}
+
+class _StockAmountDialogState extends State<_StockAmountDialog> {
+  final amount = TextEditingController(text: '1');
+  final notes = TextEditingController();
+  final form = GlobalKey<FormState>();
+  bool _busy = false;
+  String? _error;
+  bool _confirming = false;
+  bool get _dirty => amount.text != '1' || notes.text.isNotEmpty;
+  Future<void> _back() async {
+    if (_busy || _confirming) return;
+    _confirming = true;
+    final discard =
+        !_dirty ||
+        await showSmartConfirm(
+          context,
+          title: 'Discard stock adjustment?',
+          message: 'The quantity and note have not been saved.',
+          confirmLabel: 'Discard',
+          destructive: false,
+        );
+    _confirming = false;
+    if (discard && mounted) Navigator.pop(context);
+  }
+
+  @override
+  void dispose() {
+    amount.dispose();
+    notes.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy || !form.currentState!.validate()) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final count = int.parse(amount.text);
+      await widget.onSubmit?.call(count, notes.text.trim());
+      if (!mounted) return;
+      Navigator.pop(context, (amount: count, notes: notes.text.trim()));
+      if (widget.onSubmit != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${widget.restock ? 'Restocked' : 'Dispensed'} $count units.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => CallbackShortcuts(
+    bindings: {const SingleActivator(LogicalKeyboardKey.escape): _back},
+    child: PopScope(
+      canPop: !_busy && !_dirty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
         ),
-        onSubmitted: (_) {
-          final value = int.tryParse(controller.text);
-          if (value != null && value > 0) Navigator.pop(context, value);
-        },
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Form(
+            key: form,
+            onChanged: () => setState(() {}),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  widget.restock ? 'Restock Item' : 'Dispense Item',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                if (widget.item != null) ...[
+                  Text(widget.item!.name),
+                  Text('Available: ${widget.item!.quantity} units'),
+                ],
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: amount,
+                  enabled: !_busy,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.next,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(labelText: 'Quantity'),
+                  validator: (value) {
+                    final count = int.tryParse(value ?? '');
+                    if (count == null || count < 1) {
+                      return 'Enter at least 1 whole unit.';
+                    }
+                    if (!widget.restock &&
+                        widget.item != null &&
+                        count > widget.item!.quantity) {
+                      return 'Not enough stock. Available: ${widget.item!.quantity} units.';
+                    }
+                    return null;
+                  },
+                ),
+                Wrap(
+                  spacing: 12,
+                  children: [
+                    IconButton.outlined(
+                      tooltip: 'Decrease quantity',
+                      onPressed: _busy
+                          ? null
+                          : () {
+                              final count = int.tryParse(amount.text) ?? 1;
+                              amount.text = '${count > 1 ? count - 1 : 1}';
+                            },
+                      icon: const Icon(Icons.remove),
+                    ),
+                    IconButton.outlined(
+                      tooltip: 'Increase quantity',
+                      onPressed: _busy
+                          ? null
+                          : () {
+                              amount.text =
+                                  '${(int.tryParse(amount.text) ?? 0) + 1}';
+                            },
+                      icon: const Icon(Icons.add),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: notes,
+                  enabled: !_busy,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes (optional)',
+                  ),
+                ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: _busy ? null : _submit,
+                  child: Text(
+                    _busy
+                        ? 'Saving…'
+                        : widget.restock
+                        ? 'Confirm restock'
+                        : 'Confirm dispense',
+                  ),
+                ),
+                TextButton(
+                  onPressed: _busy ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final value = int.tryParse(controller.text);
-            if (value != null && value > 0) Navigator.pop(context, value);
-          },
-          child: const Text('Apply'),
-        ),
-      ],
     ),
   );
 }
@@ -135,474 +502,225 @@ Future<void> showItemHistoryDialog(
   BuildContext context,
   SmartStockController controller,
   InventoryItem item,
-) async {
-  await showDialog<void>(
-    context: context,
-    builder: (context) =>
-        _ItemHistoryDialog(controller: controller, item: item),
-  );
-}
+) => showDialog<void>(
+  context: context,
+  builder: (_) => _ItemHistoryDialog(controller: controller, item: item),
+);
 
 class _ItemHistoryDialog extends StatefulWidget {
   const _ItemHistoryDialog({required this.controller, required this.item});
   final SmartStockController controller;
   final InventoryItem item;
-
   @override
   State<_ItemHistoryDialog> createState() => _ItemHistoryDialogState();
 }
 
 class _ItemHistoryDialogState extends State<_ItemHistoryDialog> {
-  int page = 0;
-  late Future<ItemHistorySnapshot> future = _load();
-
+  int _page = 0;
+  late Future<ItemHistorySnapshot> _future = _load();
   Future<ItemHistorySnapshot> _load() =>
-      widget.controller.database.getItemHistory(widget.item.id, page: page);
-
-  void _changePage(int delta) {
-    setState(() {
-      page += delta;
-      future = _load();
-    });
-  }
-
+      widget.controller.database.getItemHistory(widget.item.id, page: _page);
+  void _change(int delta) => setState(() {
+    _page += delta;
+    _future = _load();
+  });
   @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final compact = size.width < 600;
-    final dialogHeight = compact
-        ? size.height - 24
-        : (size.height < 730 ? size.height - 36 : 680.0);
-
-    return Dialog(
-      insetPadding: EdgeInsets.all(compact ? 12 : 24),
-      clipBehavior: Clip.antiAlias,
-      child: SizedBox(
-        width: compact ? size.width : 900,
-        height: dialogHeight,
-        child: Padding(
-          padding: EdgeInsets.all(compact ? 14 : 20),
-          child: FutureBuilder<ItemHistorySnapshot>(
-            future: future,
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                if (snapshot.hasError)
-                  return Center(
-                    child: Text('Could not load history: ${snapshot.error}'),
-                  );
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              final data = snapshot.data!;
-              final pages =
-                  (data.totalEntries / DatabaseService.historyPageSize).ceil();
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget build(BuildContext context) => Dialog(
+    insetPadding: const EdgeInsets.all(12),
+    child: SizedBox(
+      width: 900,
+      height: MediaQuery.sizeOf(context).height * .9,
+      child: FutureBuilder<ItemHistorySnapshot>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Item History',
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              widget.item.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                            Text(
-                              widget.item.sku,
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  LayoutBuilder(
-                    builder: (context, box) {
-                      final columns = compact ? 2 : 4;
-                      final spacing = 8.0;
-                      final width =
-                          (box.maxWidth - spacing * (columns - 1)) / columns;
-                      return Wrap(
-                        spacing: spacing,
-                        runSpacing: spacing,
-                        children: [
-                          SizedBox(
-                            width: width,
-                            child: _MiniMetric(
-                              label: 'Current stock',
-                              value: '${data.currentQuantity}',
-                            ),
-                          ),
-                          SizedBox(
-                            width: width,
-                            child: _MiniMetric(
-                              label: 'Total added',
-                              value: '+${data.totalAdded}',
-                            ),
-                          ),
-                          SizedBox(
-                            width: width,
-                            child: _MiniMetric(
-                              label: 'Total removed',
-                              value: '-${data.totalRemoved}',
-                            ),
-                          ),
-                          SizedBox(
-                            width: width,
-                            child: _MiniMetric(
-                              label: 'Entries',
-                              value: '${data.totalEntries}',
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  Expanded(
-                    child: data.entries.isEmpty
-                        ? const Center(child: Text('No history entries.'))
-                        : compact
-                        ? _HistoryCards(entries: data.entries)
-                        : _HistoryTable(entries: data.entries),
-                  ),
-                  const SizedBox(height: 10),
-                  if (compact)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'Page ${page + 1} of ${pages < 1 ? 1 : pages} · ${data.totalEntries} entries',
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        OutlinedButton.icon(
-                          onPressed: _exportHistory,
-                          icon: const Icon(Icons.download),
-                          label: const Text('Export CSV'),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: page > 0
-                                    ? () => _changePage(-1)
-                                    : null,
-                                icon: const Icon(Icons.chevron_left),
-                                label: const Text('Previous'),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: FilledButton.tonalIcon(
-                                onPressed:
-                                    (page + 1) *
-                                            DatabaseService.historyPageSize <
-                                        data.totalEntries
-                                    ? () => _changePage(1)
-                                    : null,
-                                icon: const Icon(Icons.chevron_right),
-                                label: const Text('Next'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    )
-                  else
-                    Row(
-                      children: [
-                        Text(
-                          'Page ${page + 1} of ${pages < 1 ? 1 : pages} (${data.totalEntries} entries)',
-                        ),
-                        const Spacer(),
-                        OutlinedButton.icon(
-                          onPressed: _exportHistory,
-                          icon: const Icon(Icons.download),
-                          label: const Text('Export CSV'),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: page > 0 ? () => _changePage(-1) : null,
-                          icon: const Icon(Icons.chevron_left),
-                        ),
-                        IconButton(
-                          onPressed:
-                              (page + 1) * DatabaseService.historyPageSize <
-                                  data.totalEntries
-                              ? () => _changePage(1)
-                              : null,
-                          icon: const Icon(Icons.chevron_right),
-                        ),
-                      ],
+                  if (snapshot.hasError) ...[
+                    Text('Could not load history: ${snapshot.error}'),
+                    TextButton(
+                      onPressed: () => setState(() => _future = _load()),
+                      child: const Text('Retry'),
                     ),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _exportHistory() async {
-    try {
-      await widget.controller.exportItemHistory(widget.item);
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
-    }
-  }
-}
-
-class _MiniMetric extends StatelessWidget {
-  const _MiniMetric({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 4),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            value,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _HistoryTable extends StatelessWidget {
-  const _HistoryTable({required this.entries});
-  final List<LedgerEntry> entries;
-
-  @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    child: SingleChildScrollView(
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('Timestamp')),
-          DataColumn(label: Text('Change Type')),
-          DataColumn(label: Text('Δ Qty'), numeric: true),
-          DataColumn(label: Text('Price'), numeric: true),
-          DataColumn(label: Text('Running Balance'), numeric: true),
-        ],
-        rows: entries
-            .map(
-              (entry) => DataRow(
-                cells: [
-                  DataCell(Text(entry.timestamp)),
-                  DataCell(Text(_friendlyType(entry.changeType))),
-                  DataCell(
-                    Text(
-                      '${entry.deltaQuantity >= 0 ? '+' : ''}${entry.deltaQuantity}',
-                    ),
+                  ] else
+                    const CircularProgressIndicator(),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
                   ),
-                  DataCell(Text('₱${entry.priceSnapshot.toStringAsFixed(2)}')),
-                  DataCell(Text('${entry.runningBalance}')),
                 ],
               ),
-            )
-            .toList(),
+            );
+          }
+          final data = snapshot.data!;
+          final pages = (data.totalEntries / DatabaseService.historyPageSize)
+              .ceil()
+              .clamp(1, 1000000000);
+          return CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Item History',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Close history',
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                      Text(widget.item.name),
+                      Text(displaySku(widget.item.sku)),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 24,
+                        runSpacing: 12,
+                        children: [
+                          Text('Current stock: ${data.currentQuantity}'),
+                          Text('Total added: +${data.totalAdded}'),
+                          Text('Total removed: -${data.totalRemoved}'),
+                        ],
+                      ),
+                      TaskButton(
+                        label: 'Export history XLSX',
+                        icon: Icons.download,
+                        savedFile: true,
+                        action: () =>
+                            widget.controller.exportItemHistoryXlsx(widget.item),
+                      ),
+                      if (data.entries.isEmpty)
+                        const EmptyMessage(
+                          title: 'No history yet',
+                          message: 'Stock changes will appear here.',
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList.builder(
+                  itemCount: data.entries.length,
+                  itemBuilder: (context, index) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: LedgerCard(
+                      entry: data.entries[index],
+                      showIdentity: false,
+                    ),
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverToBoxAdapter(
+                  child: PageControls(
+                    label:
+                        'Page ${_page + 1} of $pages · ${data.totalEntries} entries',
+                    previous: _page > 0 ? () => _change(-1) : null,
+                    next: _page + 1 < pages ? () => _change(1) : null,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     ),
   );
 }
-
-class _HistoryCards extends StatelessWidget {
-  const _HistoryCards({required this.entries});
-  final List<LedgerEntry> entries;
-
-  @override
-  Widget build(BuildContext context) => ListView.separated(
-    itemCount: entries.length,
-    separatorBuilder: (_, _) => const SizedBox(height: 8),
-    itemBuilder: (context, index) {
-      final entry = entries[index];
-      return Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _friendlyType(entry.changeType),
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${entry.deltaQuantity >= 0 ? '+' : ''}${entry.deltaQuantity}',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            Text(entry.timestamp, style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                Text('Price ₱${entry.priceSnapshot.toStringAsFixed(2)}'),
-                Text('Balance ${entry.runningBalance}'),
-              ],
-            ),
-          ],
-        ),
-      );
-    },
-  );
-}
-
-String _friendlyType(String type) => switch (type) {
-  'CREATE' => 'Created',
-  'MANUAL_EDIT' => 'Manual edit',
-  'CSV_IMPORT' => 'CSV import',
-  'RESTOCK' => 'Restock',
-  'DISPENSE' => 'Dispense',
-  'ROLLBACK_REVERSAL' => 'Rollback reversal',
-  _ => type,
-};
 
 Future<void> showSchedulerDialog(
   BuildContext context,
   SmartStockController controller,
 ) async {
-  var minutes = controller.schedulerIntervalMinutes;
+  var minutes = '${controller.schedulerIntervalMinutes}';
   var format = controller.schedulerFormat;
   var directory = controller.schedulerOutputDirectory;
-
+  final form = GlobalKey<FormState>();
   await showDialog<void>(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        title: const Text('Scheduled Report Export'),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: SingleChildScrollView(
+        scrollable: true,
+        title: const Text('Schedule inventory reports'),
+        content: Form(
+          key: form,
+          child: SizedBox(
+            width: 480,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const Text(
+                  'Exports inventory reports while SmartStock is running. These are not Audit Log exports. Keep the app open; background timing is not guaranteed.',
+                ),
+                const SizedBox(height: 16),
                 TextFormField(
-                  initialValue: '$minutes',
+                  initialValue: minutes,
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(
                     labelText: 'Interval (minutes)',
-                    prefixIcon: Icon(Icons.timer_outlined),
                   ),
-                  onChanged: (value) =>
-                      minutes = int.tryParse(value) ?? minutes,
+                  onChanged: (value) => minutes = value,
+                  validator: (value) => (int.tryParse(value ?? '') ?? 0) < 5
+                      ? 'Enter at least 5 minutes.'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<ScheduledFormat>(
                   initialValue: format,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Report format',
-                    prefixIcon: Icon(Icons.description_outlined),
-                  ),
+                  decoration: const InputDecoration(labelText: 'Report format'),
                   items: ScheduledFormat.values
                       .map(
                         (value) => DropdownMenuItem(
                           value: value,
-                          child: Text(
-                            value.label,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          child: Text(value.label),
                         ),
                       )
                       .toList(),
-                  onChanged: (value) =>
-                      setState(() => format = value ?? format),
+                  onChanged: (value) => format = value ?? format,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
-                  initialValue: directory,
                   key: ValueKey(directory),
+                  initialValue: directory,
+                  decoration: const InputDecoration(
+                    labelText: 'Writable output folder',
+                  ),
                   onChanged: (value) => directory = value,
-                  decoration: InputDecoration(
-                    labelText: 'Output folder',
-                    prefixIcon: const Icon(Icons.folder_outlined),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.folder_open),
-                      onPressed: () async {
-                        try {
-                          final picked = await controller
-                              .chooseSchedulerDirectory();
-                          if (picked != null)
-                            setState(() => directory = picked);
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Folder selection unavailable: $e',
-                                ),
-                              ),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                  ),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Choose an output folder.'
+                      : null,
                 ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    controller.schedulerRunning
-                        ? 'Running every ${controller.schedulerIntervalMinutes} minutes'
-                        : 'Scheduler is stopped',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                TaskButton(
+                  label: 'Choose folder',
+                  icon: Icons.folder_open,
+                  action: () async {
+                    final picked = await controller.chooseSchedulerDirectory();
+                    if (picked != null && context.mounted) {
+                      setState(() => directory = picked);
+                    }
+                    return null;
+                  },
+                ),
+                Text(
+                  controller.schedulerRunning
+                      ? 'Running every ${controller.schedulerIntervalMinutes} minutes'
+                      : 'Schedule stopped',
                 ),
               ],
             ),
@@ -610,36 +728,30 @@ Future<void> showSchedulerDialog(
         ),
         actions: [
           if (controller.schedulerRunning)
-            OutlinedButton(
+            TextButton(
               onPressed: () {
                 controller.stopScheduler();
                 Navigator.pop(context);
               },
-              child: const Text('Stop'),
+              child: const Text('Stop schedule'),
             ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
-          FilledButton(
-            onPressed: controller.schedulerRunning
-                ? null
-                : () {
-                    try {
-                      controller.startScheduler(
-                        minutes: minutes,
-                        format: format,
-                        directory: directory,
-                      );
-                      Navigator.pop(context);
-                    } catch (e) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text('$e')));
-                    }
-                  },
-            child: const Text('Start'),
-          ),
+          if (!controller.schedulerRunning)
+            FilledButton(
+              onPressed: () {
+                if (!form.currentState!.validate()) return;
+                controller.startScheduler(
+                  minutes: int.parse(minutes),
+                  format: format,
+                  directory: directory,
+                );
+                Navigator.pop(context);
+              },
+              child: const Text('Start schedule'),
+            ),
         ],
       ),
     ),
