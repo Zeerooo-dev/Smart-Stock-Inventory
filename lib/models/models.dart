@@ -97,7 +97,9 @@ class LedgerEntry {
     required this.changeType,
     required this.deltaQuantity,
     required this.priceSnapshot,
-    required this.runningBalance,
+    this.quantityBefore,
+    this.quantityAfter,
+    this.notes = '',
   });
 
   final int ledgerId;
@@ -107,7 +109,13 @@ class LedgerEntry {
   final String changeType;
   final int deltaQuantity;
   final double priceSnapshot;
-  final int runningBalance;
+  final int? quantityBefore;
+  final int? quantityAfter;
+  final String notes;
+  int? get runningBalance => quantityAfter;
+  String get beforeText => quantityBefore?.toString() ?? 'N/A';
+  String get afterText => quantityAfter?.toString() ?? 'N/A';
+  String get changeText => '${deltaQuantity > 0 ? '+' : ''}$deltaQuantity';
 
   factory LedgerEntry.fromMap(Map<String, Object?> m) => LedgerEntry(
     ledgerId: ((m['LedgerID'] ?? 0) as num).toInt(),
@@ -117,7 +125,9 @@ class LedgerEntry {
     changeType: (m['ChangeType'] ?? '').toString(),
     deltaQuantity: ((m['DeltaQuantity'] ?? 0) as num).toInt(),
     priceSnapshot: ((m['PriceSnapshot'] ?? 0) as num).toDouble(),
-    runningBalance: ((m['RunningBalance'] ?? 0) as num).toInt(),
+    quantityBefore: (m['QuantityBefore'] as num?)?.toInt(),
+    quantityAfter: (m['QuantityAfter'] as num?)?.toInt(),
+    notes: (m['Notes'] ?? '').toString(),
   );
 }
 

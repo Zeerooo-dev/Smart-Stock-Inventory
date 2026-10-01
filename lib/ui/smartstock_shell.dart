@@ -1,8 +1,6 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
 import '../state/smartstock_controller.dart';
 import 'pages/audit_page.dart';
 import 'pages/inventory_page.dart';
@@ -13,302 +11,411 @@ import 'pages/suppliers_page.dart';
 class SmartStockShell extends StatefulWidget {
   const SmartStockShell({super.key, required this.controller});
   final SmartStockController controller;
-
   @override
   State<SmartStockShell> createState() => _SmartStockShellState();
 }
 
-class _SmartStockShellState extends State<SmartStockShell> {
+class _SmartStockShellState extends State<SmartStockShell>
+    with WidgetsBindingObserver {
   String _scanBuffer = '';
   DateTime? _lastScanKey;
-
+  bool _loading = false;
+  String? _error;
+  int _navigation = 0;
+  final _visited = <AppSection>{};
   SmartStockController get controller => widget.controller;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
+    try {
+      await controller.refreshAll();
+      if (mounted) setState(() => _error = null);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Could not refresh data: $e');
+    }
+  }
+
+  Future<void> _navigate(AppSection section) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final request = ++_navigation;
+    controller.section = section;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      switch (section) {
+        case AppSection.inventory:
+          await controller.refreshInventory();
+        case AppSection.reports:
+          await controller.refreshReports();
+        case AppSection.audit:
+          await controller.refreshAudit();
+        case AppSection.suppliers:
+          await controller.refreshSuppliers();
+        case AppSection.settings:
+          await controller.refreshCategories();
+      }
+    } catch (e) {
+      if (mounted && request == _navigation) {
+        setState(
+          () =>
+              _error = 'Could not refresh ${_label(section).toLowerCase()}: $e',
+        );
+      }
+    } finally {
+      if (mounted && request == _navigation) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _more() async {
+    final section = await showModalBottomSheet<AppSection>(
+      context: context,
+      useSafeArea: true,
+      builder: (context) => SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final section in [AppSection.suppliers, AppSection.settings])
+              ListTile(
+                leading: Icon(_icon(section)),
+                title: Text(_label(section)),
+                onTap: () => Navigator.pop(context, section),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (section != null && mounted) await _navigate(section);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      autofocus: true,
-      onKeyEvent: _onScannerKeyEvent,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 600;
-          final extendedRail = constraints.maxWidth >= 900;
-
-          final page = Column(
-            children: [
-              Expanded(child: _currentPage()),
-              _StatusBar(text: controller.statusMessage),
-            ],
-          );
-
-          if (compact) {
-            return Scaffold(
-              appBar: AppBar(
-                toolbarHeight: 56,
-                titleSpacing: 16,
-                scrolledUnderElevation: 0,
-                title: Row(
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        Icons.inventory_2_rounded,
-                        size: 19,
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _sectionLabel(controller.section),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+    _visited.add(controller.section);
+    return PopScope(
+      canPop: controller.section == AppSection.inventory,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _navigate(AppSection.inventory);
+      },
+      child: Focus(
+        autofocus: true,
+        onKeyEvent: _onScannerKeyEvent,
+        child: LayoutBuilder(
+          builder: (context, box) {
+            final rail =
+                box.maxWidth >= 760 &&
+                box.maxHeight >= 500 &&
+                MediaQuery.textScalerOf(context).scale(1) < 1.6;
+            final short = box.maxHeight < 450;
+            final page = Column(
+              children: [
+                if (_loading)
+                  const LinearProgressIndicator(
+                    semanticsLabel: 'Refreshing data',
+                  ),
+                if (_error != null)
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: MaterialBanner(
+                        content: Text(_error!),
+                        actions: [
+                          TextButton(
+                            onPressed: _refresh,
+                            child: const Text('Retry'),
+                          ),
+                          TextButton(
+                            onPressed: () => setState(() => _error = null),
+                            child: const Text('Dismiss'),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
+                Expanded(
+                  child: IndexedStack(
+                    index: controller.section.index,
+                    children: [
+                      for (final section in AppSection.values)
+                        _visited.contains(section)
+                            ? KeyedSubtree(
+                                key: ValueKey(section),
+                                child: switch (section) {
+                                  AppSection.inventory => InventoryPageView(
+                                    controller: controller,
+                                  ),
+                                  AppSection.reports => ReportsPage(
+                                    controller: controller,
+                                  ),
+                                  AppSection.audit => AuditPage(
+                                    controller: controller,
+                                  ),
+                                  AppSection.suppliers => SuppliersPage(
+                                    controller: controller,
+                                  ),
+                                  AppSection.settings => SettingsPage(
+                                    controller: controller,
+                                  ),
+                                },
+                              )
+                            : const SizedBox.shrink(),
+                    ],
+                  ),
                 ),
-              ),
-              body: SafeArea(top: false, bottom: false, child: page),
-              bottomNavigationBar: _MobileNav(controller: controller),
+              ],
             );
-          }
-
-          return Scaffold(
-            body: SafeArea(
-              child: Row(
-                children: [
-                  _AdaptiveRail(controller: controller, extended: extendedRail),
-                  const VerticalDivider(width: 1),
-                  Expanded(child: page),
-                ],
+            final destinations = [
+              for (final section in AppSection.values)
+                ListTile(
+                  selected: controller.section == section,
+                  leading: Icon(_icon(section)),
+                  title: Text(_label(section)),
+                  onTap: () {
+                    if (!rail) Navigator.pop(context);
+                    _navigate(section);
+                  },
+                ),
+            ];
+            return Scaffold(
+              appBar: rail
+                  ? null
+                  : AppBar(
+                      leadingWidth: short ? 80 : null,
+                      leading: short
+                          ? Builder(
+                              builder: (context) => TextButton(
+                                onPressed: () =>
+                                    Scaffold.of(context).openDrawer(),
+                                child: const Text('Menu'),
+                              ),
+                            )
+                          : null,
+                      title: Text(_label(controller.section)),
+                      actions: [
+                        IconButton(
+                          tooltip: 'Scan barcode',
+                          onPressed: () => showScanner(context, controller),
+                          icon: const Icon(Icons.barcode_reader),
+                        ),
+                      ],
+                    ),
+              drawer: short
+                  ? Drawer(
+                      child: SafeArea(
+                        child: ListView(
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.all(20),
+                              child: Text('SmartStock'),
+                            ),
+                            ...destinations,
+                          ],
+                        ),
+                      ),
+                    )
+                  : null,
+              body: SafeArea(
+                top: rail,
+                bottom: true,
+                child: rail
+                    ? Row(
+                        children: [
+                          SizedBox(
+                            width: box.maxWidth >= 1200 ? 210 : 180,
+                            child: ListView(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(20),
+                                  child: Text(
+                                    'SmartStock',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleLarge,
+                                  ),
+                                ),
+                                ...destinations,
+                                TextButton.icon(
+                                  onPressed: () =>
+                                      showScanner(context, controller),
+                                  icon: const Icon(Icons.barcode_reader),
+                                  label: const Text('Scan barcode'),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const VerticalDivider(width: 1),
+                          Expanded(child: page),
+                        ],
+                      )
+                    : page,
               ),
-            ),
-          );
-        },
+              bottomNavigationBar: rail || short
+                  ? null
+                  : SafeArea(
+                      top: false,
+                      child: Material(
+                        color: Theme.of(context).colorScheme.surface,
+                        child: Wrap(
+                          children: [
+                            for (var index = 0; index < 4; index++)
+                              SizedBox(
+                                width:
+                                    box.maxWidth /
+                                    (MediaQuery.textScalerOf(
+                                              context,
+                                            ).scale(1) >=
+                                            1.5
+                                        ? 2
+                                        : 4),
+                                child: Semantics(
+                                  selected:
+                                      index ==
+                                      (controller.section.index < 3
+                                          ? controller.section.index
+                                          : 3),
+                                  child: TextButton(
+                                    onPressed: () => index == 3
+                                        ? _more()
+                                        : _navigate(AppSection.values[index]),
+                                    style: TextButton.styleFrom(
+                                      textStyle: Theme.of(
+                                        context,
+                                      ).textTheme.labelMedium,
+                                      foregroundColor:
+                                          index ==
+                                              (controller.section.index < 3
+                                                  ? controller.section.index
+                                                  : 3)
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.onPrimaryContainer
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 2,
+                                        vertical: 10,
+                                      ),
+                                      backgroundColor:
+                                          index ==
+                                              (controller.section.index < 3
+                                                  ? controller.section.index
+                                                  : 3)
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primaryContainer
+                                          : null,
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          index == 3
+                                              ? Icons.more_horiz
+                                              : _icon(AppSection.values[index]),
+                                        ),
+                                        Text(
+                                          index == 3
+                                              ? 'More'
+                                              : index == 2
+                                              ? 'Audit'
+                                              : _label(
+                                                  AppSection.values[index],
+                                                ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+            );
+          },
+        ),
       ),
     );
   }
 
-  Widget _currentPage() => switch (controller.section) {
-    AppSection.inventory => InventoryPageView(controller: controller),
-    AppSection.reports => ReportsPage(controller: controller),
-    AppSection.audit => AuditPage(controller: controller),
-    AppSection.suppliers => SuppliersPage(controller: controller),
-    AppSection.settings => SettingsPage(controller: controller),
-  };
-
   KeyEventResult _onScannerKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent || _isTextEditing()) {
-      return KeyEventResult.ignored;
-    }
-
-    final now = DateTime.now();
-    final gap = _lastScanKey == null ? null : now.difference(_lastScanKey!);
-    if (gap != null && gap > const Duration(milliseconds: 80)) {
-      _scanBuffer = '';
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
-      final scanned = _scanBuffer.trim();
+    final focus = FocusManager.instance.primaryFocus?.context;
+    final editing =
+        focus?.widget is EditableText ||
+        focus?.findAncestorWidgetOfExactType<EditableText>() != null;
+    if (event is! KeyDownEvent || editing) {
       _scanBuffer = '';
       _lastScanKey = null;
-      if (scanned.length >= 6) {
-        unawaited(controller.locateSku(scanned));
-      }
       return KeyEventResult.ignored;
     }
-
-    final character = event.character;
-    if (character != null &&
-        character.length == 1 &&
-        character.codeUnitAt(0) >= 32 &&
+    final now = DateTime.now();
+    if (_lastScanKey != null &&
+        now.difference(_lastScanKey!) > const Duration(milliseconds: 80)) {
+      _scanBuffer = '';
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      final sku = _scanBuffer.trim();
+      _scanBuffer = '';
+      _lastScanKey = null;
+      if (sku.length >= 6) {
+        unawaited(_locate(sku));
+        return KeyEventResult.handled;
+      }
+    } else if (event.character != null &&
+        event.character!.length == 1 &&
         !HardwareKeyboard.instance.isControlPressed &&
         !HardwareKeyboard.instance.isMetaPressed &&
         !HardwareKeyboard.instance.isAltPressed) {
-      _scanBuffer += character;
+      _scanBuffer += event.character!;
       _lastScanKey = now;
     }
     return KeyEventResult.ignored;
   }
 
-  bool _isTextEditing() {
-    final focusContext = FocusManager.instance.primaryFocus?.context;
-    if (focusContext == null) return false;
-    return focusContext.widget is EditableText ||
-        focusContext.findAncestorWidgetOfExactType<EditableText>() != null;
+  Future<void> _locate(String sku) async {
+    try {
+      await controller.locateSku(sku);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Could not look up barcode: $e');
+    }
   }
 }
 
-String _sectionLabel(AppSection section) => switch (section) {
+String _label(AppSection section) => switch (section) {
   AppSection.inventory => 'Inventory',
   AppSection.reports => 'Reports',
   AppSection.audit => 'Audit Log',
   AppSection.suppliers => 'Suppliers',
   AppSection.settings => 'Settings',
 };
-
-class _AdaptiveRail extends StatelessWidget {
-  const _AdaptiveRail({required this.controller, required this.extended});
-  final SmartStockController controller;
-  final bool extended;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return NavigationRail(
-      extended: extended,
-      minExtendedWidth: 220,
-      selectedIndex: controller.section.index,
-      onDestinationSelected: (index) =>
-          controller.goTo(AppSection.values[index]),
-      groupAlignment: -0.78,
-      leading: Padding(
-        padding: EdgeInsets.fromLTRB(
-          extended ? 20 : 8,
-          18,
-          extended ? 20 : 8,
-          18,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: scheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                Icons.inventory_2_rounded,
-                color: scheme.onPrimaryContainer,
-              ),
-            ),
-            if (extended) ...[
-              const SizedBox(width: 12),
-              Text(
-                'SmartStock',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: scheme.primary,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-      destinations: const [
-        NavigationRailDestination(
-          icon: Icon(Icons.inventory_2_outlined),
-          selectedIcon: Icon(Icons.inventory_2),
-          label: Text('Inventory'),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.analytics_outlined),
-          selectedIcon: Icon(Icons.analytics),
-          label: Text('Reports'),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.receipt_long_outlined),
-          selectedIcon: Icon(Icons.receipt_long),
-          label: Text('Audit'),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.local_shipping_outlined),
-          selectedIcon: Icon(Icons.local_shipping),
-          label: Text('Suppliers'),
-        ),
-        NavigationRailDestination(
-          icon: Icon(Icons.settings_outlined),
-          selectedIcon: Icon(Icons.settings),
-          label: Text('Settings'),
-        ),
-      ],
-    );
-  }
-}
-
-class _MobileNav extends StatelessWidget {
-  const _MobileNav({required this.controller});
-  final SmartStockController controller;
-
-  @override
-  Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: NavigationBar(
-      height: 68,
-      labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-      selectedIndex: controller.section.index,
-      onDestinationSelected: (index) =>
-          controller.goTo(AppSection.values[index]),
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.inventory_2_outlined),
-          selectedIcon: Icon(Icons.inventory_2),
-          label: 'Inventory',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.analytics_outlined),
-          selectedIcon: Icon(Icons.analytics),
-          label: 'Reports',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.receipt_long_outlined),
-          selectedIcon: Icon(Icons.receipt_long),
-          label: 'Audit',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.local_shipping_outlined),
-          selectedIcon: Icon(Icons.local_shipping),
-          label: 'Suppliers',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.settings_outlined),
-          selectedIcon: Icon(Icons.settings),
-          label: 'Settings',
-        ),
-      ],
-    ),
-  );
-}
-
-class _StatusBar extends StatelessWidget {
-  const _StatusBar({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    if (text.trim().isEmpty || text == 'Ready') return const SizedBox.shrink();
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        child: Row(
-          children: [
-            Icon(
-              Icons.info_outline,
-              size: 16,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+IconData _icon(AppSection section) => switch (section) {
+  AppSection.inventory => Icons.inventory_2_outlined,
+  AppSection.reports => Icons.analytics_outlined,
+  AppSection.audit => Icons.receipt_long_outlined,
+  AppSection.suppliers => Icons.local_shipping_outlined,
+  AppSection.settings => Icons.settings_outlined,
+};

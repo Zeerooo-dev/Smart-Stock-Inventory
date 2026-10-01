@@ -12,239 +12,219 @@ extension SmartStockThemeName on SmartStockTheme {
 }
 
 class SmartStockThemes {
-  static const Color defaultPrimary = Color(0xFF2563EB);
-  static const Color error = Color(0xFFBA1A1A);
-  static const Color errorContainer = Color(0xFFFFDAD6);
+  static const defaultPrimary = Color(0xFF2457C5);
+  static const error = Color(0xFFB42318);
+  static const errorContainer = Color(0xFFFEE4E2);
+
+  static double contrast(Color a, Color b) {
+    final x = a.computeLuminance(), y = b.computeLuminance();
+    return ((x > y ? x : y) + .05) / ((x > y ? y : x) + .05);
+  }
+
+  static Color foreground(Color background) =>
+      contrast(Colors.black, background) > contrast(Colors.white, background)
+      ? Colors.black
+      : Colors.white;
+
+  static Color _readable(Color color, Color surface) {
+    final target = foreground(surface);
+    for (var step = 0; step <= 100; step++) {
+      final candidate = Color.lerp(color, target, step / 100)!;
+      if (contrast(candidate, surface) >= 4.5) return candidate;
+    }
+    return target;
+  }
 
   static ThemeData build(SmartStockTheme selected, {Color? accent}) {
-    final spec = _spec(selected);
-    final primary = accent ?? spec.primary;
-    final brightness = spec.brightness;
+    final dark =
+        selected == SmartStockTheme.dark ||
+        selected == SmartStockTheme.blueSteel;
+    final surface = dark ? const Color(0xFF1A2432) : Colors.white;
+    final background = dark ? const Color(0xFF111820) : const Color(0xFFF5F7FA);
+    final text = dark ? const Color(0xFFF4F7FB) : const Color(0xFF17212F);
+    final muted = dark ? const Color(0xFFBCC8D8) : const Color(0xFF465469);
+    final seed =
+        accent ??
+        switch (selected) {
+          SmartStockTheme.defaultLight => defaultPrimary,
+          SmartStockTheme.dark => const Color(0xFF9EBDFF),
+          SmartStockTheme.blueSteel => const Color(0xFF88BEE8),
+          SmartStockTheme.sageField => const Color(0xFF42633B),
+        };
+    final primary = _readable(seed, dark ? surface : background);
+    final container = Color.lerp(surface, primary, .14)!;
+    final outline = dark ? const Color(0xFF8B9AAD) : const Color(0xFF758296);
     final scheme =
         ColorScheme.fromSeed(
           seedColor: primary,
-          brightness: brightness,
-          primary: primary,
-          surface: spec.surface,
-          error: spec.error,
+          brightness: dark ? Brightness.dark : Brightness.light,
         ).copyWith(
-          primaryContainer: _mix(primary, spec.surface, .16),
-          secondary: spec.secondary,
-          secondaryContainer: spec.secondaryContainer,
-          outline: spec.outline,
-          outlineVariant: spec.outlineVariant,
-          surfaceContainerLowest: spec.card,
-          surfaceContainerLow: spec.surfaceLow,
-          surfaceContainer: spec.surfaceContainer,
-          surfaceContainerHigh: _mix(spec.surface, spec.onSurface, .08),
-          surfaceContainerHighest: _mix(spec.surface, spec.onSurface, .12),
-          onSurface: spec.onSurface,
-          onSurfaceVariant: spec.onSurfaceVariant,
+          primary: primary,
+          onPrimary: foreground(primary),
+          primaryContainer: container,
+          onPrimaryContainer: text,
+          secondary: primary,
+          onSecondary: foreground(primary),
+          secondaryContainer: container,
+          onSecondaryContainer: text,
+          surface: surface,
+          onSurface: text,
+          onSurfaceVariant: muted,
+          surfaceContainerLowest: surface,
+          surfaceContainerLow: background,
+          surfaceContainer: background,
+          surfaceContainerHigh: container,
+          surfaceContainerHighest: container,
+          outline: outline,
+          outlineVariant: outline,
+          error: dark ? const Color(0xFFFFB4AB) : error,
+          onError: dark ? const Color(0xFF601410) : Colors.white,
+          errorContainer: dark ? const Color(0xFF51241F) : errorContainer,
+          onErrorContainer: dark
+              ? const Color(0xFFFFDAD6)
+              : const Color(0xFF691B16),
         );
-
-    final inputBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide(color: scheme.outlineVariant),
+    final base = ThemeData(useMaterial3: true, colorScheme: scheme);
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: outline),
     );
-
-    return ThemeData(
-      useMaterial3: true,
-      brightness: brightness,
-      colorScheme: scheme,
-      scaffoldBackgroundColor: spec.background,
-      canvasColor: spec.background,
-      fontFamily: 'Inter',
+    return base.copyWith(
+      scaffoldBackgroundColor: background,
+      canvasColor: surface,
+      textTheme: base.textTheme.apply(bodyColor: text, displayColor: text),
+      extensions: [
+        StockColors(
+          healthy: dark ? const Color(0xFF8BD6A4) : const Color(0xFF21643A),
+          warning: dark ? const Color(0xFFFFD18A) : const Color(0xFF805000),
+        ),
+      ],
       cardTheme: CardThemeData(
-        color: spec.card,
-        margin: EdgeInsets.zero,
+        color: surface,
         elevation: 0,
+        margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: outline.withValues(alpha: .4)),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: spec.card,
+        fillColor: surface,
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 15,
+          horizontal: 12,
+          vertical: 16,
         ),
-        border: inputBorder,
-        enabledBorder: inputBorder,
-        focusedBorder: inputBorder.copyWith(
+        border: border,
+        enabledBorder: border,
+        errorMaxLines: 3,
+        focusedBorder: border.copyWith(
           borderSide: BorderSide(color: primary, width: 2),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          backgroundColor: primary,
-          foregroundColor: _onColor(primary),
-          minimumSize: const Size(0, 50),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
-        ),
+        style:
+            FilledButton.styleFrom(
+              minimumSize: const Size(48, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ).copyWith(
+              side: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.focused)
+                    ? BorderSide(color: scheme.onSurface, width: 2)
+                    : null,
+              ),
+            ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size(0, 50),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+        style:
+            OutlinedButton.styleFrom(
+              minimumSize: const Size(48, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              side: BorderSide(color: outline),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ).copyWith(
+              side: WidgetStateProperty.resolveWith(
+                (states) => BorderSide(
+                  color: states.contains(WidgetState.focused)
+                      ? primary
+                      : outline,
+                  width: states.contains(WidgetState.focused) ? 2 : 1,
+                ),
+              ),
+            ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(minimumSize: const Size(48, 48)).copyWith(
+          side: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.focused)
+                ? BorderSide(color: primary, width: 2)
+                : null,
           ),
-          side: BorderSide(color: scheme.outlineVariant),
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
-
-      navigationBarTheme: NavigationBarThemeData(
-        height: 68,
-        indicatorShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(minimumSize: const Size(48, 48)).copyWith(
+          side: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.focused)
+                ? BorderSide(color: primary, width: 2)
+                : null,
+          ),
         ),
-        labelTextStyle: const WidgetStatePropertyAll(
-          TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: surface,
+        indicatorColor: container,
+        labelTextStyle: WidgetStatePropertyAll(
+          base.textTheme.labelMedium!.copyWith(color: text),
         ),
       ),
       navigationRailTheme: NavigationRailThemeData(
-        indicatorShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
-        selectedLabelTextStyle: const TextStyle(fontWeight: FontWeight.w700),
-      ),
-      listTileTheme: const ListTileThemeData(
-        minVerticalPadding: 10,
-        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      ),
-      dataTableTheme: DataTableThemeData(
-        headingRowColor: WidgetStatePropertyAll(spec.surfaceLow),
-        headingTextStyle: TextStyle(
+        backgroundColor: surface,
+        indicatorColor: container,
+        selectedLabelTextStyle: TextStyle(
           color: primary,
-          fontWeight: FontWeight.w600,
-          fontSize: 13,
+          fontWeight: FontWeight.bold,
         ),
-        dataTextStyle: TextStyle(color: spec.onSurface, fontSize: 14),
-        dividerThickness: .7,
+        unselectedLabelTextStyle: TextStyle(color: muted),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: brightness == Brightness.dark
-            ? const Color(0xFF313244)
-            : const Color(0xFF191B23),
-        contentTextStyle: const TextStyle(color: Colors.white),
+        backgroundColor: text,
+        contentTextStyle: TextStyle(color: surface),
       ),
-      dividerColor: scheme.outlineVariant,
+      dividerColor: outline.withValues(alpha: .4),
     );
-  }
-
-  static _ThemeSpec _spec(SmartStockTheme t) => switch (t) {
-    SmartStockTheme.defaultLight => const _ThemeSpec(
-      brightness: Brightness.light,
-      background: Color(0xFFFAF8FF),
-      surface: Color(0xFFFAF8FF),
-      surfaceLow: Color(0xFFF3F3FE),
-      surfaceContainer: Color(0xFFEDEDF9),
-      card: Colors.white,
-      onSurface: Color(0xFF191B23),
-      onSurfaceVariant: Color(0xFF434655),
-      primary: Color(0xFF2563EB),
-      secondary: Color(0xFF505F76),
-      secondaryContainer: Color(0xFFD0E1FB),
-      outline: Color(0xFF737686),
-      outlineVariant: Color(0xFFC3C6D7),
-      error: Color(0xFFBA1A1A),
-    ),
-    SmartStockTheme.dark => const _ThemeSpec(
-      brightness: Brightness.dark,
-      background: Color(0xFF1E1E2E),
-      surface: Color(0xFF1E1E2E),
-      surfaceLow: Color(0xFF181825),
-      surfaceContainer: Color(0xFF313244),
-      card: Color(0xFF181825),
-      onSurface: Color(0xFFCDD6F4),
-      onSurfaceVariant: Color(0xFFA6ADC8),
-      primary: Color(0xFF89B4FA),
-      secondary: Color(0xFFA6ADC8),
-      secondaryContainer: Color(0xFF313244),
-      outline: Color(0xFF585B70),
-      outlineVariant: Color(0xFF45475A),
-      error: Color(0xFFF38BA8),
-    ),
-    SmartStockTheme.blueSteel => const _ThemeSpec(
-      brightness: Brightness.dark,
-      background: Color(0xFF1A2332),
-      surface: Color(0xFF1A2332),
-      surfaceLow: Color(0xFF111B27),
-      surfaceContainer: Color(0xFF1E3A5F),
-      card: Color(0xFF111B27),
-      onSurface: Color(0xFFE0E8F0),
-      onSurfaceVariant: Color(0xFF8AACCC),
-      primary: Color(0xFF5BA3D9),
-      secondary: Color(0xFF8AACCC),
-      secondaryContainer: Color(0xFF1E3A5F),
-      outline: Color(0xFF3D7AB5),
-      outlineVariant: Color(0xFF2E4057),
-      error: Color(0xFFFF8A8A),
-    ),
-    SmartStockTheme.sageField => const _ThemeSpec(
-      brightness: Brightness.light,
-      background: Color(0xFFF1F3E0),
-      surface: Color(0xFFF1F3E0),
-      surfaceLow: Color(0xFFE5EBD1),
-      surfaceContainer: Color(0xFFD2DCB6),
-      card: Colors.white,
-      onSurface: Color(0xFF2C3329),
-      onSurfaceVariant: Color(0xFF4A5E45),
-      primary: Color(0xFF778873),
-      secondary: Color(0xFF5C6E57),
-      secondaryContainer: Color(0xFFD2DCB6),
-      outline: Color(0xFF778873),
-      outlineVariant: Color(0xFFA1BC98),
-      error: Color(0xFFBA1A1A),
-    ),
-  };
-
-  static Color _mix(Color a, Color b, double amount) =>
-      Color.lerp(a, b, amount)!;
-
-  static Color _onColor(Color c) {
-    final luminance = c.computeLuminance();
-    return luminance < .45 ? Colors.white : const Color(0xFF1A1C24);
   }
 }
 
-class _ThemeSpec {
-  const _ThemeSpec({
-    required this.brightness,
-    required this.background,
-    required this.surface,
-    required this.surfaceLow,
-    required this.surfaceContainer,
-    required this.card,
-    required this.onSurface,
-    required this.onSurfaceVariant,
-    required this.primary,
-    required this.secondary,
-    required this.secondaryContainer,
-    required this.outline,
-    required this.outlineVariant,
-    required this.error,
-  });
-  final Brightness brightness;
-  final Color background;
-  final Color surface;
-  final Color surfaceLow;
-  final Color surfaceContainer;
-  final Color card;
-  final Color onSurface;
-  final Color onSurfaceVariant;
-  final Color primary;
-  final Color secondary;
-  final Color secondaryContainer;
-  final Color outline;
-  final Color outlineVariant;
-  final Color error;
+@immutable
+class StockColors extends ThemeExtension<StockColors> {
+  const StockColors({required this.healthy, required this.warning});
+  final Color healthy;
+  final Color warning;
+  static const barcodeBackground = Colors.white;
+  static const barcodeInk = Colors.black;
+  static StockColors of(BuildContext context) =>
+      Theme.of(context).extension<StockColors>() ??
+      StockColors(
+        healthy: Theme.of(context).colorScheme.primary,
+        warning: Theme.of(context).colorScheme.error,
+      );
+  @override
+  StockColors copyWith({Color? healthy, Color? warning}) => StockColors(
+    healthy: healthy ?? this.healthy,
+    warning: warning ?? this.warning,
+  );
+  @override
+  StockColors lerp(covariant StockColors? other, double t) => other == null
+      ? this
+      : StockColors(
+          healthy: Color.lerp(healthy, other.healthy, t)!,
+          warning: Color.lerp(warning, other.warning, t)!,
+        );
 }

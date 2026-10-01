@@ -1,8 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -11,27 +8,42 @@ import '../core/app_theme.dart';
 import '../data/database_service.dart';
 import '../models/models.dart';
 import '../services/export_service.dart';
+import '../services/notification_service.dart';
 import '../services/database_crypto.dart';
 import '../services/scheduled_report_writer.dart';
 
 enum AppSection { inventory, reports, audit, suppliers, settings }
 
-enum ScheduledFormat { csvOnly, pdfOnly, csvAndPdf }
+enum ScheduledFormat { xlsxOnly, pdfOnly, xlsxAndPdf }
 
 extension ScheduledFormatLabel on ScheduledFormat {
   String get label => switch (this) {
-    ScheduledFormat.csvOnly => 'CSV only',
+    ScheduledFormat.xlsxOnly => 'XLSX only',
     ScheduledFormat.pdfOnly => 'PDF only',
-    ScheduledFormat.csvAndPdf => 'Both CSV and PDF',
+    ScheduledFormat.xlsxAndPdf => 'Both XLSX and PDF',
   };
 }
 
 class SmartStockController extends ChangeNotifier {
-  SmartStockController({this.sandbox = false});
+  SmartStockController({
+    this.sandbox = false,
+    DatabaseService? database,
+    ExportService? exports,
+    NotificationService? notifications,
+  }) : database = database ?? DatabaseService(),
+       notifications = notifications ?? NotificationService() {
+    this.exports = exports ?? ExportService(this.database);
+    lowStockMonitor = LowStockMonitor(
+      this.database.getAllInventory,
+      this.notifications,
+    );
+  }
 
   final bool sandbox;
-  final DatabaseService database = DatabaseService();
-  late final ExportService exports = ExportService(database);
+  final DatabaseService database;
+  late final ExportService exports;
+  final NotificationService notifications;
+  late final LowStockMonitor lowStockMonitor;
 
   bool loading = true;
   String? startupError;
@@ -66,7 +78,7 @@ class SmartStockController extends ChangeNotifier {
   Timer? _scheduler;
   bool schedulerRunning = false;
   int schedulerIntervalMinutes = 60;
-  ScheduledFormat schedulerFormat = ScheduledFormat.csvOnly;
+  ScheduledFormat schedulerFormat = ScheduledFormat.xlsxOnly;
   String schedulerOutputDirectory = '';
 
   int get inventoryTotalPages {
@@ -90,6 +102,7 @@ class SmartStockController extends ChangeNotifier {
         legacyPassphrase: legacyPassphrase,
       );
       await refreshAll();
+      await lowStockMonitor.start();
       startupError = null;
       statusMessage = sandbox
           ? 'Sandbox database loaded.'
@@ -147,9 +160,11 @@ class SmartStockController extends ChangeNotifier {
         page: inventoryPageIndex,
       );
     }
-    if (selectedItem != null &&
-        !inventoryPage.items.any((i) => i.id == selectedItem!.id)) {
-      selectedItem = null;
+    if (selectedItem != null) {
+      final matching = inventoryPage.items.where(
+        (i) => i.id == selectedItem!.id,
+      );
+      selectedItem = matching.isEmpty ? null : matching.first;
     }
     if (notify) notifyListeners();
   }
@@ -196,6 +211,10 @@ class SmartStockController extends ChangeNotifier {
     selectedItem = null;
     statusMessage = "'$name' added to inventory.";
     await _refreshAfterInventoryMutation();
+    notifications.show(
+      'Item Added Successfully',
+      '$name was successfully added to inventory.',
+    );
   }
 
   Future<void> updateItem({
@@ -230,11 +249,13 @@ class SmartStockController extends ChangeNotifier {
     InventoryItem item,
     int amount, {
     required bool restock,
+    String notes = '',
   }) async {
     await database.adjustStock(
       itemId: item.id,
       amount: amount,
       restock: restock,
+      notes: notes,
     );
     statusMessage =
         '${restock ? 'Restocked' : 'Dispensed'} $amount unit(s) for \'${item.name}\'.';
@@ -247,6 +268,7 @@ class SmartStockController extends ChangeNotifier {
       refreshReports(notify: false),
       refreshAudit(notify: false),
     ]);
+    await lowStockMonitor.check();
     notifyListeners();
   }
 
@@ -278,19 +300,19 @@ class SmartStockController extends ChangeNotifier {
     if (notify) notifyListeners();
   }
 
-  Future<void> importCsv() async {
-    final result = await exports.importInventoryCsv();
+  Future<void> importInventory() async {
+    final result = await exports.importInventoryFile();
     if (result == null) return;
     statusMessage = result.skippedDuplicates.isEmpty
-        ? 'Imported ${result.imported} item(s) from CSV.'
+        ? 'Imported ${result.imported} item(s).'
         : 'Imported ${result.imported}; skipped ${result.skippedDuplicates.length} duplicate name(s).';
     await refreshCategories(notify: false);
     await _refreshAfterInventoryMutation();
   }
 
-  Future<Uri?> exportInventoryCsv() async {
-    final uri = await exports.exportInventoryCsv();
-    if (uri != null) setStatus('Inventory CSV saved.');
+  Future<Uri?> exportInventoryXlsx() async {
+    final uri = await exports.exportInventoryXlsx();
+    if (uri != null) setStatus('Inventory XLSX saved.');
     return uri;
   }
 
@@ -361,15 +383,33 @@ class SmartStockController extends ChangeNotifier {
     await _refreshAfterInventoryMutation();
   }
 
-  Future<Uri?> exportAuditCsv() async {
-    final uri = await exports.exportAuditCsv(auditFilter);
-    if (uri != null) setStatus('Audit ledger CSV saved.');
+  Future<Uri?> exportAuditXlsx() async {
+    final uri = await exports.exportAuditXlsx(auditFilter);
+    if (uri != null) {
+      setStatus('Audit ledger XLSX saved.');
+      notifications.show(
+        'Audit Export Successful',
+        'Your audit XLSX report was exported successfully.',
+      );
+    }
     return uri;
   }
 
-  Future<Uri?> exportItemHistory(InventoryItem item) async {
-    final uri = await exports.exportItemHistoryCsv(item.id, item.name);
-    if (uri != null) setStatus("History for '${item.name}' exported.");
+  Future<Uri?> exportAuditPdf() async {
+    final uri = await exports.exportAuditPdf(auditFilter);
+    if (uri != null) {
+      setStatus('Audit PDF saved.');
+      notifications.show(
+        'Audit Export Successful',
+        'Your audit PDF report was exported successfully.',
+      );
+    }
+    return uri;
+  }
+
+  Future<Uri?> exportItemHistoryXlsx(InventoryItem item) async {
+    final uri = await exports.exportItemHistoryXlsx(item.id, item.name);
+    if (uri != null) setStatus("XLSX history for '${item.name}' saved.");
     return uri;
   }
 
@@ -511,24 +551,17 @@ class SmartStockController extends ChangeNotifier {
     final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     var wroteAny = false;
     try {
-      if (schedulerFormat == ScheduledFormat.csvOnly ||
-          schedulerFormat == ScheduledFormat.csvAndPdf) {
-        final items = await database.getAllInventory();
-        final rows = <List<Object?>>[
-          ['ItemID', 'SKU', 'ItemName', 'Category', 'Quantity', 'UnitPrice'],
-          ...items.map(
-            (i) => [i.id, i.sku, i.name, i.category, i.quantity, i.unitPrice],
-          ),
-        ];
-        final bytes = Uint8List.fromList(utf8.encode(Csv().encode(rows)));
+      if (schedulerFormat == ScheduledFormat.xlsxOnly ||
+          schedulerFormat == ScheduledFormat.xlsxAndPdf) {
+        final bytes = await exports.buildInventoryXlsx();
         wroteAny |= await writeScheduledFile(
           schedulerOutputDirectory,
-          'inventory_$stamp.csv',
+          'inventory_$stamp.xlsx',
           bytes,
         );
       }
       if (schedulerFormat == ScheduledFormat.pdfOnly ||
-          schedulerFormat == ScheduledFormat.csvAndPdf) {
+          schedulerFormat == ScheduledFormat.xlsxAndPdf) {
         final bytes = await exports.buildInventoryPdf(scheduled: true);
         wroteAny |= await writeScheduledFile(
           schedulerOutputDirectory,
@@ -537,7 +570,7 @@ class SmartStockController extends ChangeNotifier {
         );
       }
       statusMessage = wroteAny
-          ? 'Scheduled report generated: $stamp'
+          ? 'Scheduled report generated (${schedulerFormat.label}): $stamp'
           : 'Scheduled reports require a desktop/mobile writable folder on this platform.';
     } catch (e) {
       statusMessage = 'Scheduled report failed: $e';
@@ -546,6 +579,7 @@ class SmartStockController extends ChangeNotifier {
   }
 
   Future<void> shutdown() async {
+    lowStockMonitor.dispose();
     _scheduler?.cancel();
     _scheduler = null;
     try {
@@ -557,6 +591,7 @@ class SmartStockController extends ChangeNotifier {
 
   @override
   void dispose() {
+    lowStockMonitor.dispose();
     _scheduler?.cancel();
     super.dispose();
   }

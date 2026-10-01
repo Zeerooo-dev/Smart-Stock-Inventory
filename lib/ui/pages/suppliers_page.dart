@@ -1,536 +1,394 @@
 import 'package:flutter/material.dart';
-
 import '../../models/models.dart';
 import '../../state/smartstock_controller.dart';
 import '../widgets/dialogs.dart';
+import '../widgets/stock_widgets.dart';
 
 class SuppliersPage extends StatefulWidget {
   const SuppliersPage({super.key, required this.controller});
   final SmartStockController controller;
-
   @override
   State<SuppliersPage> createState() => _SuppliersPageState();
 }
 
 class _SuppliersPageState extends State<SuppliersPage> {
-  final _name = TextEditingController();
-  final _email = TextEditingController();
-  final _phone = TextEditingController();
-  final _notes = TextEditingController();
-  final _pageScroll = ScrollController();
-  int? _loadedSupplier;
+  String _search = '';
+  bool _descending = false;
+  Future<void> _edit([SupplierRecord? item]) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) =>
+              _SupplierEditor(controller: widget.controller, item: item),
+        ),
+      );
+  Future<void> _details(SupplierRecord item) async {
+    final edit = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: Text(item.name),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SelectableText(
+                'Email: ${item.email.isEmpty ? 'Not provided' : item.email}',
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                'Phone: ${item.phone.isEmpty ? 'Not provided' : item.phone}',
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                'Notes: ${item.notes.isEmpty ? 'None' : item.notes}',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Edit supplier'),
+          ),
+        ],
+      ),
+    );
+    if (edit == true && mounted) await _edit(item);
+  }
 
   @override
+  Widget build(BuildContext context) {
+    final items =
+        widget.controller.suppliers
+            .where(
+              (item) => '${item.name} ${item.email} ${item.phone} ${item.notes}'
+                  .toLowerCase()
+                  .contains(_search),
+            )
+            .toList()
+          ..sort(
+            (a, b) =>
+                (_descending ? -1 : 1) *
+                a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          );
+    return CustomScrollView(
+      key: const PageStorageKey('supplier-scroll'),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Suppliers',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: 'Search suppliers',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: (value) =>
+                      setState(() => _search = value.trim().toLowerCase()),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () => _edit(),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Supplier'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          setState(() => _descending = !_descending),
+                      icon: const Icon(Icons.sort_by_alpha),
+                      label: Text(_descending ? 'Name Z to A' : 'Name A to Z'),
+                    ),
+                    TaskButton(
+                      label: 'Refresh suppliers',
+                      icon: Icons.refresh,
+                      action: () async {
+                        await widget.controller.refreshSuppliers();
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
+                if (items.isEmpty)
+                  EmptyMessage(
+                    title: widget.controller.suppliers.isEmpty
+                        ? 'No suppliers yet'
+                        : 'No matching suppliers',
+                    message: widget.controller.suppliers.isEmpty
+                        ? 'Add a supplier to keep their contact details here.'
+                        : 'Try another company name, email, or phone number.',
+                  ),
+              ],
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: SliverList.builder(
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Card(
+                  child: InkWell(
+                    onTap: () => _details(item),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            item.name,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          if (item.email.isNotEmpty) Text(item.email),
+                          if (item.phone.isNotEmpty) Text(item.phone),
+                          if (item.notes.isNotEmpty)
+                            Text(
+                              item.notes,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          const Text('View contact details'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
+    );
+  }
+}
+
+class _SupplierEditor extends StatefulWidget {
+  const _SupplierEditor({required this.controller, this.item});
+  final SmartStockController controller;
+  final SupplierRecord? item;
+  @override
+  State<_SupplierEditor> createState() => _SupplierEditorState();
+}
+
+class _SupplierEditorState extends State<_SupplierEditor> {
+  final _form = GlobalKey<FormState>();
+  late final _name = TextEditingController(text: widget.item?.name ?? '');
+  late final _email = TextEditingController(text: widget.item?.email ?? '');
+  late final _phone = TextEditingController(text: widget.item?.phone ?? '');
+  late final _notes = TextEditingController(text: widget.item?.notes ?? '');
+  bool _dirty = false, _busy = false, _leave = false;
+  String? _error;
+  @override
   void dispose() {
-    _name.dispose();
-    _email.dispose();
-    _phone.dispose();
-    _notes.dispose();
-    _pageScroll.dispose();
+    for (final c in [_name, _email, _phone, _notes]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  void _sync() {
-    final supplier = widget.controller.selectedSupplier;
-    if (supplier?.id == _loadedSupplier) return;
-    _loadedSupplier = supplier?.id;
-    _name.text = supplier?.name ?? '';
-    _email.text = supplier?.email ?? '';
-    _phone.text = supplier?.phone ?? '';
-    _notes.text = supplier?.notes ?? '';
+  void _pop() {
+    setState(() {
+      _leave = true;
+      _busy = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.pop(context);
+    });
   }
 
-  void _clear() {
-    widget.controller.selectSupplier(null);
-    _loadedSupplier = null;
-    _name.clear();
-    _email.clear();
-    _phone.clear();
-    _notes.clear();
-    setState(() {});
-  }
-
-  void _error(Object e) {
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+  Future<void> _close() async {
+    if (_busy) return;
+    if (_dirty &&
+        !await showSmartConfirm(
+          context,
+          title: 'Discard changes?',
+          message: 'Your unsaved supplier changes will be lost.',
+          confirmLabel: 'Discard',
+          destructive: false,
+        )) {
+      return;
     }
+    if (mounted) _pop();
   }
 
   Future<void> _save() async {
+    if (_busy || !_form.currentState!.validate()) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       await widget.controller.saveSupplier(
-        id: widget.controller.selectedSupplier?.id,
+        id: widget.item?.id,
         name: _name.text,
         email: _email.text,
         phone: _phone.text,
         notes: _notes.text,
       );
-      _clear();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Supplier saved.')));
+        _pop();
+      }
     } catch (e) {
-      _error(e);
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _delete([SupplierRecord? target]) async {
-    final supplier = target ?? widget.controller.selectedSupplier;
-    if (supplier == null) return;
-    final ok = await showSmartConfirm(
+  Future<void> _delete() async {
+    if (_busy || widget.item == null) return;
+    if (!await showSmartConfirm(
       context,
+      title: 'Delete supplier',
+      confirmLabel: 'Delete supplier',
       message:
-          "Delete supplier '${supplier.name}'?\n\nLinked ledger entries will lose their supplier reference.",
-    );
-    if (!ok) return;
+          "Delete '${widget.item!.name}' and its contact details? Inventory and audit history are kept.",
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
-      await widget.controller.deleteSupplier(supplier);
-      _clear();
+      await widget.controller.deleteSupplier(widget.item!);
+      if (mounted) _pop();
     } catch (e) {
-      _error(e);
-    }
-  }
-
-  void _edit(SupplierRecord supplier) {
-    widget.controller.selectSupplier(supplier);
-    if (_pageScroll.hasClients) {
-      _pageScroll.animateTo(
-        0,
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOut,
-      );
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    _sync();
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 600;
-        final expanded = constraints.maxWidth >= 1100;
-        final padding = expanded
-            ? 24.0
-            : compact
-            ? 12.0
-            : 18.0;
-        final form = _SupplierForm(
-          fillHeight: expanded,
-          compact: compact,
-          name: _name,
-          email: _email,
-          phone: _phone,
-          notes: _notes,
-          editing: widget.controller.selectedSupplier != null,
-          onSave: _save,
-          onClear: _clear,
-          onDelete: () => _delete(),
-        );
-
-        if (expanded) {
-          return Padding(
-            padding: EdgeInsets.all(padding),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(width: 360, child: form),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: _SupplierDirectory(
-                    controller: widget.controller,
-                    useTable: true,
-                    bounded: true,
-                    onEdit: _edit,
-                    onDelete: _delete,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return ListView(
-          controller: _pageScroll,
-          padding: EdgeInsets.all(padding),
-          children: [
-            form,
-            const SizedBox(height: 14),
-            _SupplierDirectory(
-              controller: widget.controller,
-              useTable: false,
-              bounded: false,
-              onEdit: _edit,
-              onDelete: _delete,
-            ),
-            const SizedBox(height: 20),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _SupplierForm extends StatelessWidget {
-  const _SupplierForm({
-    required this.fillHeight,
-    required this.compact,
-    required this.name,
-    required this.email,
-    required this.phone,
-    required this.notes,
-    required this.editing,
-    required this.onSave,
-    required this.onClear,
-    required this.onDelete,
-  });
-
-  final bool fillHeight;
-  final bool compact;
-  final TextEditingController name;
-  final TextEditingController email;
-  final TextEditingController phone;
-  final TextEditingController notes;
-  final bool editing;
-  final VoidCallback onSave;
-  final VoidCallback onClear;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final body = SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: name,
-            textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(
-              labelText: 'Company Name',
-              prefixIcon: Icon(Icons.business_outlined),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: email,
-            keyboardType: TextInputType.emailAddress,
-            textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              prefixIcon: Icon(Icons.email_outlined),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: phone,
-            keyboardType: TextInputType.phone,
-            textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(
-              labelText: 'Phone',
-              prefixIcon: Icon(Icons.phone_outlined),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: notes,
-            minLines: 3,
-            maxLines: 5,
-            decoration: const InputDecoration(
-              labelText: 'Notes',
-              alignLabelWithHint: true,
-              prefixIcon: Icon(Icons.notes_outlined),
-            ),
-          ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: onSave,
-            icon: Icon(editing ? Icons.save_outlined : Icons.add_business),
-            label: Text(editing ? 'Save Supplier' : 'Add Supplier'),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: onClear,
-            icon: const Icon(Icons.refresh),
-            label: Text(editing ? 'Cancel Editing' : 'Reset Form'),
-          ),
-          if (editing) ...[
-            const SizedBox(height: 10),
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Theme.of(context).colorScheme.onError,
-              ),
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('Delete Supplier'),
-            ),
-          ],
-        ],
+  Widget build(BuildContext context) => PopScope(
+    canPop: _leave || (!_dirty && !_busy),
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) _close();
+    },
+    child: Scaffold(
+      appBar: AppBar(
+        title: Text(widget.item == null ? 'Add Supplier' : 'Edit supplier'),
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: _close,
+          icon: const Icon(Icons.arrow_back),
+        ),
       ),
-    );
-
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  editing ? 'Edit Supplier' : 'Add Supplier',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680),
+            child: Form(
+              key: _form,
+              onChanged: () {
+                if (!_dirty) setState(() => _dirty = true);
+              },
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  TextFormField(
+                    controller: _name,
+                    enabled: !_busy,
+                    autofocus: true,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Company Name',
+                    ),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Enter the company name.'
+                        : null,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Maintain supplier contact details in one place.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          if (fillHeight) Expanded(child: body) else body,
-        ],
-      ),
-    );
-  }
-}
-
-class _SupplierDirectory extends StatelessWidget {
-  const _SupplierDirectory({
-    required this.controller,
-    required this.useTable,
-    required this.bounded,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  final SmartStockController controller;
-  final bool useTable;
-  final bool bounded;
-  final ValueChanged<SupplierRecord> onEdit;
-  final ValueChanged<SupplierRecord> onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final content = controller.suppliers.isEmpty
-        ? const Padding(
-            padding: EdgeInsets.symmetric(vertical: 56),
-            child: Center(child: Text('No suppliers yet.')),
-          )
-        : useTable
-        ? _table(context)
-        : _cards(context);
-
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Supplier Directory',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _email,
+                    enabled: !_busy,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Email (optional)',
+                    ),
+                    validator: (value) =>
+                        value != null &&
+                            value.trim().isNotEmpty &&
+                            !RegExp(
+                              r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+                            ).hasMatch(value.trim())
+                        ? 'Enter a valid email address.'
+                        : null,
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${controller.suppliers.length} supplier record(s)',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          if (bounded) Expanded(child: content) else content,
-        ],
-      ),
-    );
-  }
-
-  Widget _table(BuildContext context) => SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    child: SingleChildScrollView(
-      child: DataTable(
-        showCheckboxColumn: false,
-        columns: const [
-          DataColumn(label: Text('Supplier ID'), numeric: true),
-          DataColumn(label: Text('Company Name')),
-          DataColumn(label: Text('Email')),
-          DataColumn(label: Text('Phone')),
-          DataColumn(label: Text('Notes')),
-        ],
-        rows: controller.suppliers
-            .map(
-              (supplier) => DataRow(
-                selected: controller.selectedSupplier?.id == supplier.id,
-                onSelectChanged: (_) => onEdit(supplier),
-                cells: [
-                  DataCell(
-                    Text('#SUP-${supplier.id.toString().padLeft(4, '0')}'),
-                  ),
-                  DataCell(
-                    SizedBox(
-                      width: 180,
-                      child: Text(
-                        supplier.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _phone,
+                    enabled: !_busy,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone (optional)',
                     ),
                   ),
-                  DataCell(
-                    SizedBox(
-                      width: 180,
-                      child: Text(
-                        supplier.email,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _notes,
+                    enabled: !_busy,
+                    minLines: 3,
+                    maxLines: 6,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes (optional)',
                     ),
                   ),
-                  DataCell(
-                    SizedBox(
-                      width: 130,
-                      child: Text(
-                        supplier.phone,
-                        overflow: TextOverflow.ellipsis,
+                  if (_error != null)
+                    Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
                       ),
                     ),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    onPressed: _busy ? null : _save,
+                    child: Text(_busy ? 'Saving…' : 'Save supplier'),
                   ),
-                  DataCell(
-                    SizedBox(
-                      width: 220,
-                      child: Text(
-                        supplier.notes,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  TextButton(
+                    onPressed: _busy ? null : _close,
+                    child: const Text('Cancel'),
+                  ),
+                  if (widget.item != null)
+                    OutlinedButton(
+                      onPressed: _busy ? null : _delete,
+                      child: const Text('Delete supplier'),
                     ),
-                  ),
                 ],
               ),
-            )
-            .toList(),
+            ),
+          ),
+        ),
       ),
     ),
   );
-
-  Widget _cards(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(10),
-      itemCount: controller.suppliers.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        final supplier = controller.suppliers[index];
-        final selected = controller.selectedSupplier?.id == supplier.id;
-        return Material(
-          color: selected
-              ? scheme.secondaryContainer.withValues(alpha: .5)
-              : scheme.surfaceContainerLowest,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: BorderSide(
-              color: selected ? scheme.primary : scheme.outlineVariant,
-            ),
-          ),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () => onEdit(supplier),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: scheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.business_outlined,
-                      color: scheme.onPrimaryContainer,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          supplier.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        if (supplier.email.isNotEmpty) ...[
-                          const SizedBox(height: 5),
-                          Text(
-                            supplier.email,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                        if (supplier.phone.isNotEmpty) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            supplier.phone,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                        if (supplier.notes.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            supplier.notes,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    tooltip: 'Supplier actions',
-                    onSelected: (value) {
-                      if (value == 'edit') onEdit(supplier);
-                      if (value == 'delete') onDelete(supplier);
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(
-                        value: 'edit',
-                        child: ListTile(
-                          leading: Icon(Icons.edit_outlined),
-                          title: Text('Edit'),
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: ListTile(
-                          leading: Icon(Icons.delete_outline),
-                          title: Text('Delete'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
 }
