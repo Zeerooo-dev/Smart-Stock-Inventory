@@ -33,6 +33,26 @@ Legacy encrypted Python Fernet files must first be opened and backed up by the P
 
 The audit ledger is not a tamper-proof store against direct database edits. Keep a separate backup before importing an existing database, and verify imported data before relying on the beta.
 
+## What's New in v2.1.0
+
+SmartStock v2.1.0 introduces a major UI and usability overhaul, along with improvements to inventory reporting and export functionality.
+
+### Highlights
+- Refreshed SmartStock interface and overall user experience
+- Improved inventory workflow and item interaction
+- Updated report and audit export formatting
+- Added XLSX export support
+- Improved PDF export presentation
+- Philippine Peso formatting with proper thousands separators
+- Clearer transaction quantity history with:
+  - Quantity Before
+  - Quantity Changed
+  - Quantity After
+- Improved transaction highlighting for stock additions, deductions, and out-of-stock results
+- General UI polish and usability improvements
+
+> CSV import support is still retained for compatible inventory files.
+
 ## Development
 
 Use Flutter **3.47.4 stable** (Dart 3.13.3), matching CI. Install the platform build tools for your target. `pubspec.lock` is tracked for reproducible application dependencies.
