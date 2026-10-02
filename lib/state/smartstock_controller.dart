@@ -189,8 +189,9 @@ class SmartStockController extends ChangeNotifier {
 
   Future<void> inventoryNext() async {
     if ((inventoryPageIndex + 1) * DatabaseService.inventoryPageSize >=
-        inventoryPage.total)
+        inventoryPage.total) {
       return;
+    }
     inventoryPageIndex++;
     await refreshInventory();
   }
@@ -380,8 +381,9 @@ class SmartStockController extends ChangeNotifier {
   }
 
   Future<void> auditNext() async {
-    if ((auditPageIndex + 1) * DatabaseService.auditPageSize >= auditPage.total)
+    if ((auditPageIndex + 1) * DatabaseService.auditPageSize >= auditPage.total) {
       return;
+    }
     auditPageIndex++;
     await refreshAudit();
   }

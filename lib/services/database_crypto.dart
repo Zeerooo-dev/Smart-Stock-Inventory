@@ -49,10 +49,11 @@ class DatabaseCrypto {
     final saved = await keyStore.read(name);
     if (saved != null) {
       final bytes = base64Decode(saved);
-      if (bytes.length != 32)
+      if (bytes.length != 32) {
         throw StateError(
           'Stored database key is invalid. No data was changed.',
         );
+      }
       return SecretKey(bytes);
     }
     if (!create) {
@@ -84,15 +85,17 @@ class DatabaseCrypto {
       );
     }
     final payload = await factory.readDatabaseBytes(encryptedPath);
-    if (payload.length < 32)
+    if (payload.length < 32) {
       throw StateError(
         'Encrypted database is truncated. Original file preserved.',
       );
+    }
     final format = String.fromCharCodes(payload.take(4));
     SecretKey decryptKey;
     if (format == 'SSG1') {
-      if (legacyPassphrase == null || legacyPassphrase.isEmpty)
+      if (legacyPassphrase == null || legacyPassphrase.isEmpty) {
         throw LegacyDatabaseKeyRequired();
+      }
       decryptKey = SecretKey(
         (await Sha256().hash(utf8.encode(legacyPassphrase))).bytes,
       );
@@ -141,10 +144,11 @@ class DatabaseCrypto {
 
   Future<void> encryptAndDeletePlaintext() async {
     final key = _key;
-    if (key == null)
+    if (key == null) {
       throw StateError(
         'Database encryption was not initialized. Plaintext preserved.',
       );
+    }
     if (!await factory.databaseExists(dbPath)) return;
     if (await factory.databaseExists(encryptedPath)) {
       throw StateError(

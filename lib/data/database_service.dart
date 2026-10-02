@@ -592,18 +592,22 @@ class DatabaseService {
         final category = (row['Category'] ?? '').trim();
         final quantity = int.tryParse((row['Quantity'] ?? '').trim());
         final price = double.tryParse((row['UnitPrice'] ?? '').trim());
-        if (name.isEmpty)
+        if (name.isEmpty) {
           throw FormatException('Row $rowNumber: ItemName is blank.');
-        if (category.isEmpty)
+        }
+        if (category.isEmpty) {
           throw FormatException('Row $rowNumber: Category is blank.');
-        if (quantity == null || quantity < 0)
+        }
+        if (quantity == null || quantity < 0) {
           throw FormatException(
             'Row $rowNumber: Quantity must be a non-negative integer.',
           );
-        if (price == null || !price.isFinite || price < 0)
+        }
+        if (price == null || !price.isFinite || price < 0) {
           throw FormatException(
             'Row $rowNumber: UnitPrice must be a non-negative number.',
           );
+        }
         if (existing.contains(name)) {
           skipped.add(name);
           continue;
@@ -779,10 +783,11 @@ class DatabaseService {
       );
       if (ledgerRows.isEmpty) throw StateError('Ledger entry not found.');
       final itemIdValue = ledgerRows.first['ItemID'];
-      if (itemIdValue == null)
+      if (itemIdValue == null) {
         throw StateError(
           'The associated item was deleted. Rollback is not possible.',
         );
+      }
       final itemId = (itemIdValue as num).toInt();
       final originalDelta = ((ledgerRows.first['DeltaQuantity'] ?? 0) as num)
           .toInt();
