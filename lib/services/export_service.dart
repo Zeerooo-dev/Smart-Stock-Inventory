@@ -13,7 +13,7 @@ import '../data/database_service.dart';
 import '../models/models.dart';
 
 typedef SaveExport =
-    Future<Uri?> Function(String name, Uint8List bytes, String extension);
+Future<Uri?> Function(String name, Uint8List bytes, String extension);
 
 class _PdfTransactionRow {
   const _PdfTransactionRow({
@@ -72,13 +72,13 @@ class ExportService {
   );
 
   static final xl.CustomNumericNumFormat _xlsxMoneyFormat =
-      xl.CustomNumericNumFormat(formatCode: '₱#,##0.00');
+  xl.CustomNumericNumFormat(formatCode: '₱#,##0.00');
 
   static final xl.CustomNumericNumFormat _xlsxQuantityFormat =
-      xl.CustomNumericNumFormat(formatCode: '#,##0.##');
+  xl.CustomNumericNumFormat(formatCode: '#,##0.##');
 
   static final xl.CustomNumericNumFormat _xlsxQuantityChangeFormat =
-      xl.CustomNumericNumFormat(formatCode: '+#,##0.##;-#,##0.##;0');
+  xl.CustomNumericNumFormat(formatCode: '+#,##0.##;-#,##0.##;0');
 
   // Exact transaction order requested for BOTH PDF and XLSX.
   static const transactionHeaders = [
@@ -94,10 +94,10 @@ class ExportService {
   ];
 
   static Future<Uri?> _saveFile(
-    String name,
-    Uint8List bytes,
-    String extension,
-  ) {
+      String name,
+      Uint8List bytes,
+      String extension,
+      ) {
     String mimeType;
 
     switch (extension.toLowerCase()) {
@@ -106,7 +106,7 @@ class ExportService {
         break;
       case 'xlsx':
         mimeType =
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
         break;
       default:
         mimeType = 'application/octet-stream';
@@ -243,12 +243,12 @@ class ExportService {
   }
 
   void _xlsxSetText(
-    xl.Sheet sheet,
-    int column,
-    int row,
-    String value, {
-    xl.CellStyle? style,
-  }) {
+      xl.Sheet sheet,
+      int column,
+      int row,
+      String value, {
+        xl.CellStyle? style,
+      }) {
     sheet.updateCell(
       xl.CellIndex.indexByColumnRow(columnIndex: column, rowIndex: row),
       xl.TextCellValue(value),
@@ -257,12 +257,12 @@ class ExportService {
   }
 
   void _xlsxSetNumber(
-    xl.Sheet sheet,
-    int column,
-    int row,
-    num value, {
-    required xl.CellStyle style,
-  }) {
+      xl.Sheet sheet,
+      int column,
+      int row,
+      num value, {
+        required xl.CellStyle style,
+      }) {
     sheet.updateCell(
       xl.CellIndex.indexByColumnRow(columnIndex: column, rowIndex: row),
       _xlsxNumberValue(value),
@@ -295,10 +295,10 @@ class ExportService {
   }
 
   void _xlsxWriteTransactionRows(
-    xl.Sheet sheet,
-    List<LedgerEntry> entries, {
-    int startRow = 1,
-  }) {
+      xl.Sheet sheet,
+      List<LedgerEntry> entries, {
+        int startRow = 1,
+      }) {
     for (var index = 0; index < entries.length; index++) {
       final entry = entries[index];
       final row = startRow + index;
@@ -633,13 +633,16 @@ class ExportService {
   Future<CsvImportResult?> importInventoryCsv() =>
       _pickInventoryFile(const ['csv']);
 
+  Future<CsvImportResult?> importInventoryXlsx() =>
+      _pickInventoryFile(const ['xlsx']);
+
   Future<CsvImportResult?> importInventoryFile() =>
       _pickInventoryFile(const ['csv', 'xlsx']);
 
   Future<CsvImportResult?> _pickInventoryFile(List<String> extensions) async {
     final file = await FilePicker.pickFile(
       dialogTitle: extensions.length == 1
-          ? 'Import Inventory CSV'
+          ? 'Import Inventory ${extensions.single.toUpperCase()}'
           : 'Import Inventory CSV/XLSX',
       type: FileType.custom,
       allowedExtensions: extensions,
@@ -653,9 +656,9 @@ class ExportService {
   }
 
   Future<CsvImportResult> importInventoryBytes(
-    Uint8List bytes, {
-    required String extension,
-  }) async {
+      Uint8List bytes, {
+        required String extension,
+      }) async {
     final decoded = switch (extension.toLowerCase()) {
       'csv' => Csv().decode(utf8.decode(bytes)),
       'xlsx' => _inventoryXlsxRows(bytes),
@@ -673,7 +676,7 @@ class ExportService {
     if (missing.isNotEmpty) {
       throw FormatException(
         'Missing required headers: ${missing.join(', ')}. '
-        'Required: ItemName, Category, Quantity, UnitPrice.',
+            'Required: ItemName, Category, Quantity, UnitPrice.',
       );
     }
 
@@ -740,8 +743,8 @@ class ExportService {
     final categoryColumn = rows[0].indexOf('Category');
     if (nameColumn >= 0 && categoryColumn >= 0) {
       rows.removeWhere(
-        (row) =>
-            row.length > categoryColumn &&
+            (row) =>
+        row.length > categoryColumn &&
             row.length > nameColumn &&
             row[nameColumn].trim().isEmpty &&
             row[categoryColumn].trim() == 'TOTALS',
@@ -896,7 +899,7 @@ class ExportService {
       entries,
       title: 'SmartStock Audit Report',
       subtitle:
-          '${DateFormat('yyyy-MM-dd').format(filter.dateFrom)} to '
+      '${DateFormat('yyyy-MM-dd').format(filter.dateFrom)} to '
           '${DateFormat('yyyy-MM-dd').format(filter.dateTo)} (UTC)'
           ' | Item: ${filter.itemName ?? 'All'}'
           ' | Type: ${filter.changeType ?? 'All'}',
@@ -919,32 +922,32 @@ class ExportService {
       children: headers
           .map(
             (header) => pw.Padding(
-              padding: const pw.EdgeInsets.symmetric(
-                horizontal: 5,
-                vertical: 6,
-              ),
-              child: pw.Text(
-                header,
-                style: pw.TextStyle(
-                  color: PdfColors.white,
-                  fontSize: 8.5,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
+          padding: const pw.EdgeInsets.symmetric(
+            horizontal: 5,
+            vertical: 6,
+          ),
+          child: pw.Text(
+            header,
+            style: pw.TextStyle(
+              color: PdfColors.white,
+              fontSize: 8.5,
+              fontWeight: pw.FontWeight.bold,
             ),
-          )
+          ),
+        ),
+      )
           .toList(),
     );
   }
 
   pw.Widget _pdfCell(
-    String text, {
-    PdfColor? background,
-    PdfColor? textColor,
-    bool bold = false,
-    pw.Alignment alignment = pw.Alignment.centerLeft,
-    double fontSize = 8,
-  }) {
+      String text, {
+        PdfColor? background,
+        PdfColor? textColor,
+        bool bold = false,
+        pw.Alignment alignment = pw.Alignment.centerLeft,
+        double fontSize = 8,
+      }) {
     return pw.Container(
       alignment: alignment,
       padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5),
@@ -1012,11 +1015,11 @@ class ExportService {
   }
 
   void _addTransactionPages(
-    pw.Document document,
-    List<LedgerEntry> entries, {
-    required String title,
-    String? subtitle,
-  }) {
+      pw.Document document,
+      List<LedgerEntry> entries, {
+        required String title,
+        String? subtitle,
+      }) {
     final rows = _buildPdfTransactionRows(entries);
 
     document.addPage(
@@ -1037,8 +1040,8 @@ class ExportService {
             ),
             pw.Text(
               'Exported: '
-              '${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())} '
-              '(local)',
+                  '${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())} '
+                  '(local)',
               style: const pw.TextStyle(fontSize: 9),
             ),
             if (subtitle != null)

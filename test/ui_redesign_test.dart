@@ -111,12 +111,12 @@ Future<void> loadRoboto() async {
 }
 
 Future<void> setup(
-  WidgetTester tester,
-  Widget page, {
-  Size size = const Size(360, 800),
-  double scale = 1,
-  SmartStockTheme theme = SmartStockTheme.defaultLight,
-}) async {
+    WidgetTester tester,
+    Widget page, {
+      Size size = const Size(360, 800),
+      double scale = 1,
+      SmartStockTheme theme = SmartStockTheme.defaultLight,
+    }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -137,10 +137,10 @@ Future<void> setup(
 }
 
 Future<void> reveal(
-  WidgetTester tester,
-  Finder finder, [
-  double delta = 200,
-]) async {
+    WidgetTester tester,
+    Finder finder, [
+      double delta = 200,
+    ]) async {
   await tester.scrollUntilVisible(
     finder,
     delta,
@@ -152,7 +152,7 @@ Future<void> reveal(
 void main() {
   testWidgets(
     'stock lookup failure stays visible without opening a stale form',
-    (tester) async {
+        (tester) async {
       final controller = fixture.UiController(
         database: UnavailableItemDatabase(),
       );
@@ -181,7 +181,7 @@ void main() {
 
   testWidgets(
     'refresh error actions remain reachable in short landscape at 200 percent',
-    (tester) async {
+        (tester) async {
       await loadRoboto();
       final controller = UnavailableRefreshController();
       addTearDown(controller.dispose);
@@ -205,7 +205,7 @@ void main() {
 
   testWidgets(
     'wide inventory opens a read-only detail pane and edit reloads current stock',
-    (tester) async {
+        (tester) async {
       final database = RedesignDatabase();
       final controller = fixture.UiController(database: database);
       addTearDown(controller.dispose);
@@ -241,7 +241,7 @@ void main() {
 
   testWidgets(
     'supplier validation and pending save prevent duplicate submissions',
-    (tester) async {
+        (tester) async {
       final controller = SupplierController();
       addTearDown(controller.dispose);
       await setup(tester, SuppliersPage(controller: controller));
@@ -276,7 +276,7 @@ void main() {
 
   testWidgets(
     'file save displays its provider destination and cancellation stays honest',
-    (tester) async {
+        (tester) async {
       await setup(
         tester,
         Column(
@@ -311,7 +311,7 @@ void main() {
 
   testWidgets(
     'stock sheet retains invalid quantity and note with keyboard at 200 percent',
-    (tester) async {
+        (tester) async {
       await loadRoboto();
       var submitted = 0;
       await setup(
@@ -363,8 +363,8 @@ void main() {
   );
 
   testWidgets('RGB picker labels and values work with semantics enabled', (
-    tester,
-  ) async {
+      tester,
+      ) async {
     final controller = fixture.UiController();
     addTearDown(controller.dispose);
     final semantics = tester.ensureSemantics();
@@ -423,7 +423,7 @@ void main() {
 
   testWidgets(
     'unsaved item draft survives cancel and rotation; discard is explicit',
-    (tester) async {
+        (tester) async {
       final controller = fixture.UiController();
       addTearDown(controller.dispose);
       await setup(tester, InventoryPageView(controller: controller));
@@ -449,7 +449,7 @@ void main() {
 
   testWidgets(
     'name, SKU search and stock filter operate on the full inventory',
-    (tester) async {
+        (tester) async {
       final controller = fixture.UiController(database: FullInventoryDatabase())
         ..inventoryPage = const InventoryPage(
           items: [fixture.mouse],
@@ -479,7 +479,7 @@ void main() {
 
   testWidgets(
     'audit exposes deleted snapshots and notes without offering reversal',
-    (tester) async {
+        (tester) async {
       final controller = fixture.UiController()
         ..auditPage = const LedgerPage(entries: [largeEntry], total: 1);
       addTearDown(controller.dispose);
@@ -503,7 +503,7 @@ void main() {
 
   testWidgets(
     'pending audit filter blocks exports and validates the item name',
-    (tester) async {
+        (tester) async {
       final controller = fixture.UiController();
       addTearDown(controller.dispose);
       await setup(tester, AuditPage(controller: controller));
@@ -517,12 +517,10 @@ void main() {
       await tester.ensureVisible(find.text('Apply filters'));
       await tester.tap(find.text('Apply filters'));
       await tester.pumpAndSettle();
-      final export = tester.widget<TaskButton>(
-        find.byWidgetPredicate(
-          (w) => w is TaskButton && w.label == 'Export Audit PDF',
-        ),
+      final export = tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, 'Export'),
       );
-      expect(export.enabled, isFalse);
+      expect(export.onPressed, isNull);
       await reveal(tester, find.textContaining('Choose an existing item name'));
       expect(
         find.textContaining('Choose an existing item name'),
@@ -532,8 +530,8 @@ void main() {
   );
 
   testWidgets('history and confirmation reflow at 200 percent in all themes', (
-    tester,
-  ) async {
+      tester,
+      ) async {
     final controller = fixture.UiController(database: RedesignDatabase());
     addTearDown(controller.dispose);
     await loadRoboto();
@@ -548,7 +546,7 @@ void main() {
                   onPressed: () => showSmartConfirm(
                     context,
                     message:
-                        'Delete this synthetic fixture and preserve the complete audit history?',
+                    'Delete this synthetic fixture and preserve the complete audit history?',
                   ),
                   child: const Text('Confirm'),
                 ),
@@ -582,7 +580,7 @@ void main() {
 
   testWidgets(
     'explicit scanner submits with the field focused and reports unknown SKUs',
-    (tester) async {
+        (tester) async {
       final controller = fixture.UiController(database: RedesignDatabase());
       addTearDown(controller.dispose);
       await setup(
@@ -613,8 +611,8 @@ void main() {
   );
 
   testWidgets('Blue Steel dark toggle reflects theme and keeps custom accent', (
-    tester,
-  ) async {
+      tester,
+      ) async {
     final controller = fixture.UiController()
       ..theme = SmartStockTheme.blueSteel
       ..customAccent = Colors.yellow;
@@ -642,7 +640,7 @@ void main() {
 
   testWidgets(
     'report renders real categories without progress semantics errors',
-    (tester) async {
+        (tester) async {
       final controller = fixture.UiController()
         ..categorySummaries = const [
           CategorySummary(

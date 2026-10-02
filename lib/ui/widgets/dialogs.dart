@@ -9,12 +9,12 @@ import '../../state/smartstock_controller.dart';
 import 'stock_widgets.dart';
 
 Future<bool> showSmartConfirm(
-  BuildContext context, {
-  required String message,
-  String title = 'Confirm deletion',
-  String confirmLabel = 'Delete',
-  bool destructive = true,
-}) async =>
+    BuildContext context, {
+      required String message,
+      String title = 'Confirm deletion',
+      String confirmLabel = 'Delete',
+      bool destructive = true,
+    }) async =>
     await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -31,9 +31,9 @@ Future<bool> showSmartConfirm(
           FilledButton(
             style: destructive
                 ? FilledButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                    foregroundColor: Theme.of(context).colorScheme.onError,
-                  )
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            )
                 : null,
             onPressed: () => Navigator.pop(context, true),
             child: Text(confirmLabel),
@@ -41,13 +41,13 @@ Future<bool> showSmartConfirm(
         ],
       ),
     ) ??
-    false;
+        false;
 
 Future<void> showItemDetailsDialog(
-  BuildContext context,
-  InventoryItem item, {
-  required SmartStockController controller,
-}) => showDialog<void>(
+    BuildContext context,
+    InventoryItem item, {
+      required SmartStockController controller,
+    }) => showDialog<void>(
   context: context,
   builder: (_) => ItemDetails(item: item, controller: controller),
 );
@@ -141,10 +141,10 @@ class _ItemDetailsState extends State<ItemDetails> {
               onPressed: _busy
                   ? null
                   : () => showItemHistoryDialog(
-                      context,
-                      widget.controller,
-                      _item,
-                    ),
+                context,
+                widget.controller,
+                _item,
+              ),
               icon: const Icon(Icons.history),
               label: const Text('View history'),
             ),
@@ -258,11 +258,11 @@ class _Barcode extends StatelessWidget {
 }
 
 Future<void> adjustItemStock(
-  BuildContext context,
-  SmartStockController controller,
-  InventoryItem item, {
-  required bool restock,
-}) async {
+    BuildContext context,
+    SmartStockController controller,
+    InventoryItem item, {
+      required bool restock,
+    }) async {
   InventoryItem? current;
   try {
     current = await controller.database.findItemById(item.id);
@@ -298,11 +298,11 @@ Future<void> adjustItemStock(
 }
 
 Future<({int amount, String notes})?> showStockAmountDialog(
-  BuildContext context, {
-  required bool restock,
-  InventoryItem? item,
-  Future<void> Function(int, String)? onSubmit,
-}) => showModalBottomSheet<({int amount, String notes})>(
+    BuildContext context, {
+      required bool restock,
+      InventoryItem? item,
+      Future<void> Function(int, String)? onSubmit,
+    }) => showModalBottomSheet<({int amount, String notes})>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
@@ -334,13 +334,13 @@ class _StockAmountDialogState extends State<_StockAmountDialog> {
     _confirming = true;
     final discard =
         !_dirty ||
-        await showSmartConfirm(
-          context,
-          title: 'Discard stock adjustment?',
-          message: 'The quantity and note have not been saved.',
-          confirmLabel: 'Discard',
-          destructive: false,
-        );
+            await showSmartConfirm(
+              context,
+              title: 'Discard stock adjustment?',
+              message: 'The quantity and note have not been saved.',
+              confirmLabel: 'Discard',
+              destructive: false,
+            );
     _confirming = false;
     if (discard && mounted) Navigator.pop(context);
   }
@@ -438,9 +438,9 @@ class _StockAmountDialogState extends State<_StockAmountDialog> {
                       onPressed: _busy
                           ? null
                           : () {
-                              final count = int.tryParse(amount.text) ?? 1;
-                              amount.text = '${count > 1 ? count - 1 : 1}';
-                            },
+                        final count = int.tryParse(amount.text) ?? 1;
+                        amount.text = '${count > 1 ? count - 1 : 1}';
+                      },
                       icon: const Icon(Icons.remove),
                     ),
                     IconButton.outlined(
@@ -448,9 +448,9 @@ class _StockAmountDialogState extends State<_StockAmountDialog> {
                       onPressed: _busy
                           ? null
                           : () {
-                              amount.text =
-                                  '${(int.tryParse(amount.text) ?? 0) + 1}';
-                            },
+                        amount.text =
+                        '${(int.tryParse(amount.text) ?? 0) + 1}';
+                      },
                       icon: const Icon(Icons.add),
                     ),
                   ],
@@ -499,10 +499,10 @@ class _StockAmountDialogState extends State<_StockAmountDialog> {
 }
 
 Future<void> showItemHistoryDialog(
-  BuildContext context,
-  SmartStockController controller,
-  InventoryItem item,
-) => showDialog<void>(
+    BuildContext context,
+    SmartStockController controller,
+    InventoryItem item,
+    ) => showDialog<void>(
   context: context,
   builder: (_) => _ItemHistoryDialog(controller: controller, item: item),
 );
@@ -627,7 +627,7 @@ class _ItemHistoryDialogState extends State<_ItemHistoryDialog> {
                 sliver: SliverToBoxAdapter(
                   child: PageControls(
                     label:
-                        'Page ${_page + 1} of $pages · ${data.totalEntries} entries',
+                    'Page ${_page + 1} of $pages · ${data.totalEntries} entries',
                     previous: _page > 0 ? () => _change(-1) : null,
                     next: _page + 1 < pages ? () => _change(1) : null,
                   ),
@@ -641,11 +641,341 @@ class _ItemHistoryDialogState extends State<_ItemHistoryDialog> {
   );
 }
 
+Future<void> _showActionError(
+    BuildContext context, {
+      required String title,
+      required Object error,
+    }) async {
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      scrollable: true,
+      title: Text(title),
+      content: SelectableText('$error'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _showSavedExportResult(
+    BuildContext context,
+    Uri? uri,
+    ) async {
+  if (!context.mounted) return;
+  if (uri == null) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Save cancelled.')));
+    return;
+  }
+  await showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      scrollable: true,
+      title: const Text('File saved'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Find this file in the folder or provider you chose.'),
+          const SizedBox(height: 12),
+          SelectableText(uri.toString()),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> showInventoryImportOptions(
+    BuildContext context,
+    SmartStockController controller,
+    ) async {
+  final choice = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Import inventory'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('CSV file'),
+              subtitle: const Text('Import inventory from a .csv file'),
+              onTap: () => Navigator.pop(context, 'csv'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.grid_on),
+              title: const Text('XLSX workbook'),
+              subtitle: const Text('Import inventory from a .xlsx workbook'),
+              onTap: () => Navigator.pop(context, 'xlsx'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    ),
+  );
+  if (choice == null || !context.mounted) return;
+  try {
+    if (choice == 'csv') {
+      await controller.importInventoryCsv();
+    } else {
+      await controller.importInventoryXlsx();
+    }
+  } catch (e) {
+    if (!context.mounted) return;
+    await _showActionError(
+      context,
+      title: 'Could not import inventory',
+      error: e,
+    );
+  }
+}
+
+Future<void> showInventoryExportOptions(
+    BuildContext context,
+    SmartStockController controller,
+    ) async {
+  final choice = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Export inventory report'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf_outlined),
+              title: const Text('PDF report'),
+              onTap: () => Navigator.pop(context, 'pdf'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.grid_on),
+              title: const Text('XLSX workbook'),
+              onTap: () => Navigator.pop(context, 'xlsx'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    ),
+  );
+  if (choice == null || !context.mounted) return;
+  try {
+    final uri = choice == 'pdf'
+        ? await controller.exportInventoryPdf()
+        : await controller.exportInventoryXlsx();
+    if (!context.mounted) return;
+    await _showSavedExportResult(context, uri);
+  } catch (e) {
+    if (!context.mounted) return;
+    await _showActionError(
+      context,
+      title: 'Could not export inventory report',
+      error: e,
+    );
+  }
+}
+
+Future<void> showAuditExportOptions(
+    BuildContext context,
+    SmartStockController controller,
+    ) async {
+  final choice = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Export Audit Log'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf_outlined),
+              title: const Text('PDF report'),
+              onTap: () => Navigator.pop(context, 'pdf'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.grid_on),
+              title: const Text('XLSX workbook'),
+              onTap: () => Navigator.pop(context, 'xlsx'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    ),
+  );
+  if (choice == null || !context.mounted) return;
+  try {
+    final uri = choice == 'pdf'
+        ? await controller.exportAuditPdf()
+        : await controller.exportAuditXlsx();
+    if (!context.mounted) return;
+    await _showSavedExportResult(context, uri);
+  } catch (e) {
+    if (!context.mounted) return;
+    await _showActionError(
+      context,
+      title: 'Could not export Audit Log',
+      error: e,
+    );
+  }
+}
+
+Future<void> showAuditSchedulerDialog(
+    BuildContext context,
+    SmartStockController controller,
+    ) async {
+  var days = '${controller.auditSchedulerIntervalDays}';
+  var format = controller.auditSchedulerFormat;
+  var directory = controller.auditSchedulerOutputDirectory;
+  final form = GlobalKey<FormState>();
+  await showDialog<void>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        scrollable: true,
+        title: const Text('Schedule Audit Log exports'),
+        content: Form(
+          key: form,
+          child: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Exports the active Audit Log filter while SmartStock is running. Keep the app open; background timing is not guaranteed.',
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  initialValue: days,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(
+                    labelText: 'Interval (days)',
+                  ),
+                  onChanged: (value) => days = value,
+                  validator: (value) => (int.tryParse(value ?? '') ?? 0) < 1
+                      ? 'Enter at least 1 day.'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<ScheduledFormat>(
+                  initialValue: format,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Report format'),
+                  items: ScheduledFormat.values
+                      .map(
+                        (value) => DropdownMenuItem(
+                      value: value,
+                      child: Text(value.label),
+                    ),
+                  )
+                      .toList(),
+                  onChanged: (value) => format = value ?? format,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: ValueKey(directory),
+                  initialValue: directory,
+                  decoration: const InputDecoration(
+                    labelText: 'Writable output folder',
+                  ),
+                  onChanged: (value) => directory = value,
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Choose an output folder.'
+                      : null,
+                ),
+                TaskButton(
+                  label: 'Choose folder',
+                  icon: Icons.folder_open,
+                  action: () async {
+                    final picked = await controller
+                        .chooseAuditSchedulerDirectory();
+                    if (picked != null && context.mounted) {
+                      setState(() => directory = picked);
+                    }
+                    return null;
+                  },
+                ),
+                Text(
+                  controller.auditSchedulerRunning
+                      ? 'Running every ${controller.auditSchedulerIntervalDays} day(s)'
+                      : 'Schedule stopped',
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          if (controller.auditSchedulerRunning)
+            TextButton(
+              onPressed: () {
+                controller.stopAuditScheduler();
+                Navigator.pop(context);
+              },
+              child: const Text('Stop schedule'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          if (!controller.auditSchedulerRunning)
+            FilledButton(
+              onPressed: () {
+                if (!form.currentState!.validate()) return;
+                controller.startAuditScheduler(
+                  days: int.parse(days),
+                  format: format,
+                  directory: directory,
+                );
+                Navigator.pop(context);
+              },
+              child: const Text('Start schedule'),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
 Future<void> showSchedulerDialog(
-  BuildContext context,
-  SmartStockController controller,
-) async {
-  var minutes = '${controller.schedulerIntervalMinutes}';
+    BuildContext context,
+    SmartStockController controller,
+    ) async {
+  var days = '${controller.schedulerIntervalDays}';
   var format = controller.schedulerFormat;
   var directory = controller.schedulerOutputDirectory;
   final form = GlobalKey<FormState>();
@@ -668,15 +998,15 @@ Future<void> showSchedulerDialog(
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
-                  initialValue: minutes,
+                  initialValue: days,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(
-                    labelText: 'Interval (minutes)',
+                    labelText: 'Interval (days)',
                   ),
-                  onChanged: (value) => minutes = value,
-                  validator: (value) => (int.tryParse(value ?? '') ?? 0) < 5
-                      ? 'Enter at least 5 minutes.'
+                  onChanged: (value) => days = value,
+                  validator: (value) => (int.tryParse(value ?? '') ?? 0) < 1
+                      ? 'Enter at least 1 day.'
                       : null,
                 ),
                 const SizedBox(height: 12),
@@ -687,10 +1017,10 @@ Future<void> showSchedulerDialog(
                   items: ScheduledFormat.values
                       .map(
                         (value) => DropdownMenuItem(
-                          value: value,
-                          child: Text(value.label),
-                        ),
-                      )
+                      value: value,
+                      child: Text(value.label),
+                    ),
+                  )
                       .toList(),
                   onChanged: (value) => format = value ?? format,
                 ),
@@ -719,7 +1049,7 @@ Future<void> showSchedulerDialog(
                 ),
                 Text(
                   controller.schedulerRunning
-                      ? 'Running every ${controller.schedulerIntervalMinutes} minutes'
+                      ? 'Running every ${controller.schedulerIntervalDays} day(s)'
                       : 'Schedule stopped',
                 ),
               ],
@@ -744,7 +1074,7 @@ Future<void> showSchedulerDialog(
               onPressed: () {
                 if (!form.currentState!.validate()) return;
                 controller.startScheduler(
-                  minutes: int.parse(minutes),
+                  days: int.parse(days),
                   format: format,
                   directory: directory,
                 );

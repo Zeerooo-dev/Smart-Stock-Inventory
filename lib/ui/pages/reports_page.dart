@@ -14,7 +14,7 @@ class ReportsPage extends StatelessWidget {
     final money = NumberFormat.currency(locale: 'en_PH', symbol: '₱');
     final totalValue = controller.categorySummaries.fold<double>(
       0,
-      (value, category) => value + category.value,
+          (value, category) => value + category.value,
     );
     return ListView(
       key: const PageStorageKey('reports-scroll'),
@@ -28,10 +28,10 @@ class ReportsPage extends StatelessWidget {
         LayoutBuilder(
           builder: (context, box) {
             final columns =
-                (box.maxWidth /
-                        (320 * MediaQuery.textScalerOf(context).scale(1)))
-                    .floor()
-                    .clamp(1, 3);
+            (box.maxWidth /
+                (320 * MediaQuery.textScalerOf(context).scale(1)))
+                .floor()
+                .clamp(1, 3);
             final width = (box.maxWidth - (columns - 1) * 12) / columns;
             return Wrap(
               spacing: 12,
@@ -39,10 +39,10 @@ class ReportsPage extends StatelessWidget {
               children: [
                 for (final pair in [
                   (
-                    'Units in stock',
-                    NumberFormat.decimalPattern().format(
-                      controller.kpis.totalQuantity,
-                    ),
+                  'Units in stock',
+                  NumberFormat.decimalPattern().format(
+                    controller.kpis.totalQuantity,
+                  ),
                   ),
                   ('Low-stock items', '${controller.kpis.lowStockCount}'),
                   ('Inventory value', money.format(controller.kpis.totalValue)),
@@ -85,7 +85,7 @@ class ReportsPage extends StatelessWidget {
           const EmptyMessage(
             title: 'No inventory data',
             message:
-                'Add inventory items to see stock totals and category values.',
+            'Add inventory items to see stock totals and category values.',
           ),
         for (final category in controller.categorySummaries)
           Padding(
@@ -112,7 +112,7 @@ class ReportsPage extends StatelessWidget {
                       : 0,
                   minHeight: 8,
                   semanticsLabel:
-                      '${category.category} share of inventory value',
+                  '${category.category} share of inventory value',
                 ),
               ],
             ),
@@ -123,7 +123,7 @@ class ReportsPage extends StatelessWidget {
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const Text(
-          'Choose a folder or provider when saving. Scheduled exports contain inventory reports.',
+          'Refresh the totals, import inventory data, or export the current report.',
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -138,30 +138,20 @@ class ReportsPage extends StatelessWidget {
                 return null;
               },
             ),
-            TaskButton(
-              label: 'Import Inventory CSV/XLSX',
-              icon: Icons.upload_file,
-              action: () async {
-                await controller.importInventory();
-                return null;
-              },
+            OutlinedButton.icon(
+              onPressed: () => showInventoryImportOptions(context, controller),
+              icon: const Icon(Icons.upload_file),
+              label: const Text('Import'),
             ),
-            TaskButton(
-              label: 'Export PDF Report',
-              icon: Icons.picture_as_pdf_outlined,
-              savedFile: true,
-              action: controller.exportInventoryPdf,
-            ),
-            TaskButton(
-              label: 'Export Report XLSX',
-              icon: Icons.download,
-              savedFile: true,
-              action: controller.exportInventoryXlsx,
+            OutlinedButton.icon(
+              onPressed: () => showInventoryExportOptions(context, controller),
+              icon: const Icon(Icons.download),
+              label: const Text('Export'),
             ),
             OutlinedButton.icon(
               onPressed: () => showSchedulerDialog(context, controller),
               icon: const Icon(Icons.schedule),
-              label: const Text('Schedule inventory reports'),
+              label: const Text('Schedule reports'),
             ),
           ],
         ),
@@ -172,9 +162,9 @@ class ReportsPage extends StatelessWidget {
 }
 
 Future<void> showLowStockItems(
-  BuildContext context,
-  SmartStockController controller,
-) => Navigator.of(context).push<void>(
+    BuildContext context,
+    SmartStockController controller,
+    ) => Navigator.of(context).push<void>(
   MaterialPageRoute(builder: (_) => _LowStockPage(controller: controller)),
 );
 
@@ -192,7 +182,7 @@ class _LowStockPageState extends State<_LowStockPage> {
         .where((item) => item.isLowStock)
         .toList();
     items.sort(
-      (a, b) =>
+          (a, b) =>
           (a.quantity / a.reorderLevel).compareTo(b.quantity / b.reorderLevel),
     );
     return items;

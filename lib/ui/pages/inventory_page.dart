@@ -19,7 +19,7 @@ class _InventoryPageViewState extends State<InventoryPageView> {
   List<InventoryItem> _all = [];
   String _query = '', _sort = 'Name', _status = 'All stock';
   String? _category, _error;
-  bool _loading = false, _detailsOpen = false;
+  bool _loading = false, _detailsOpen = false, _filtersOpen = false;
   int _request = 0;
   InventoryPage? _lastPage;
   InventoryItem? _selected;
@@ -194,7 +194,7 @@ class _InventoryPageViewState extends State<InventoryPageView> {
           title: 'Delete item',
           confirmLabel: 'Delete item',
           message:
-              "Delete '${item.name}' from inventory? The deletion is recorded in the Audit Log. Existing history is kept.",
+          "Delete '${item.name}' from inventory? The deletion is recorded in the Audit Log. Existing history is kept.",
         )) {
           return;
         }
@@ -215,24 +215,24 @@ class _InventoryPageViewState extends State<InventoryPageView> {
     final items = _all
         .where(
           (item) =>
-              ('${item.name} ${item.sku} ${item.category}'
-                  .toLowerCase()
-                  .contains(_query)) &&
-              (_category == null || item.category == _category) &&
-              (_status == 'All stock' ||
-                  (_status == 'Low stock'
-                      ? item.isLowStock
-                      : item.quantity == 0)),
-        )
+      ('${item.name} ${item.sku} ${item.category}'
+          .toLowerCase()
+          .contains(_query)) &&
+          (_category == null || item.category == _category) &&
+          (_status == 'All stock' ||
+              (_status == 'Low stock'
+                  ? item.isLowStock
+                  : item.quantity == 0)),
+    )
         .toList();
     items.sort((a, b) {
       final result = switch (_sort) {
         'Quantity' => a.quantity.compareTo(b.quantity),
         'Value' => b.value.compareTo(a.value),
         'Urgency' =>
-          (a.quantity / (a.reorderLevel > 0 ? a.reorderLevel : 1)).compareTo(
-            b.quantity / (b.reorderLevel > 0 ? b.reorderLevel : 1),
-          ),
+            (a.quantity / (a.reorderLevel > 0 ? a.reorderLevel : 1)).compareTo(
+              b.quantity / (b.reorderLevel > 0 ? b.reorderLevel : 1),
+            ),
         _ => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
       };
       return result == 0 ? a.id.compareTo(b.id) : result;
@@ -245,7 +245,7 @@ class _InventoryPageViewState extends State<InventoryPageView> {
     builder: (context, box) {
       final wide =
           box.maxWidth >= 1100 &&
-          MediaQuery.textScalerOf(context).scale(1) < 1.4;
+              MediaQuery.textScalerOf(context).scale(1) < 1.4;
       final items = _visible;
       final list = RefreshIndicator(
         onRefresh: _load,
@@ -284,10 +284,10 @@ class _InventoryPageViewState extends State<InventoryPageView> {
                         _debounce?.cancel();
                         _debounce = Timer(
                           const Duration(milliseconds: 200),
-                          () {
+                              () {
                             if (mounted) {
                               setState(
-                                () => _query = value.trim().toLowerCase(),
+                                    () => _query = value.trim().toLowerCase(),
                               );
                             }
                           },
@@ -325,68 +325,86 @@ class _InventoryPageViewState extends State<InventoryPageView> {
                         ),
                       ],
                     ),
-                    ExpansionTile(
-                      key: const PageStorageKey('inventory-filter-panel'),
-                      title: Text('Filter and sort · $_status'),
-                      tilePadding: EdgeInsets.zero,
-                      children: [
-                        DropdownButtonFormField<String>(
-                          initialValue: _status,
-                          key: ValueKey(_status),
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Stock status',
-                          ),
-                          items: ['All stock', 'Low stock', 'Out of stock']
-                              .map(
-                                (s) =>
-                                    DropdownMenuItem(value: s, child: Text(s)),
-                              )
-                              .toList(),
-                          onChanged: (s) => setState(() => _status = s!),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _loading
+                          ? null
+                          : () {
+                        setState(() {
+                          _filtersOpen = !_filtersOpen;
+                        });
+                      },
+                      icon: Icon(
+                        _filtersOpen
+                            ? Icons.expand_less
+                            : Icons.expand_more,
+                      ),
+                      label: Text('Filter and sort · $_status'),
+                    ),
+                    if (_filtersOpen) ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: _status,
+                        key: ValueKey('inventory-status-$_status'),
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Stock status',
                         ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: _category,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Category',
+                        items: ['All stock', 'Low stock', 'Out of stock']
+                            .map(
+                              (s) =>
+                              DropdownMenuItem(value: s, child: Text(s)),
+                        )
+                            .toList(),
+                        onChanged: (s) {
+                          if (s == null) return;
+                          setState(() => _status = s);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: _category,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Category',
+                        ),
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: null,
+                            child: Text('All categories'),
                           ),
-                          items: [
-                            const DropdownMenuItem<String>(
-                              value: null,
-                              child: Text('All categories'),
-                            ),
-                            ...widget.controller.categories.map(
-                              (c) => DropdownMenuItem(
-                                value: c.name,
-                                child: Text(
-                                  c.name,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                          ...widget.controller.categories.map(
+                                (c) => DropdownMenuItem(
+                              value: c.name,
+                              child: Text(
+                                c.name,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          ],
-                          onChanged: (s) => setState(() => _category = s),
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: _sort,
-                          key: ValueKey(_sort),
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Sort by',
                           ),
-                          items: ['Name', 'Quantity', 'Value', 'Urgency']
-                              .map(
-                                (s) =>
-                                    DropdownMenuItem(value: s, child: Text(s)),
-                              )
-                              .toList(),
-                          onChanged: (s) => setState(() => _sort = s!),
+                        ],
+                        onChanged: (s) => setState(() => _category = s),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: _sort,
+                        key: ValueKey('inventory-sort-$_sort'),
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Sort by',
                         ),
-                      ],
-                    ),
+                        items: ['Name', 'Quantity', 'Value', 'Urgency']
+                            .map(
+                              (s) =>
+                              DropdownMenuItem(value: s, child: Text(s)),
+                        )
+                            .toList(),
+                        onChanged: (s) {
+                          if (s == null) return;
+                          setState(() => _sort = s);
+                        },
+                      ),
+                    ],
                     if (_loading)
                       const LinearProgressIndicator(
                         semanticsLabel: 'Loading inventory',
@@ -455,16 +473,16 @@ class _InventoryPageViewState extends State<InventoryPageView> {
               padding: const EdgeInsets.all(16),
               child: _selected == null
                   ? const EmptyMessage(
-                      title: 'Item details',
-                      message:
-                          'Select an item to see its stock, barcode, and history.',
-                    )
+                title: 'Item details',
+                message:
+                'Select an item to see its stock, barcode, and history.',
+              )
                   : ItemDetails(
-                      key: ValueKey(_selected!.id),
-                      item: _selected!,
-                      controller: widget.controller,
-                      embedded: true,
-                    ),
+                key: ValueKey(_selected!.id),
+                item: _selected!,
+                controller: widget.controller,
+                embedded: true,
+              ),
             ),
           ),
         ],
@@ -493,8 +511,8 @@ class InventoryRow extends StatelessWidget {
     final initials = words.isEmpty
         ? '?'
         : (words.first.characters.first +
-                  (words.length > 1 ? words.last.characters.first : ''))
-              .toUpperCase();
+        (words.length > 1 ? words.last.characters.first : ''))
+        .toUpperCase();
     final scheme = Theme.of(context).colorScheme;
     return Card(
       child: InkWell(
@@ -709,17 +727,17 @@ class _ItemEditorState extends State<_ItemEditor> {
                     items: widget.controller.categories
                         .map(
                           (c) => DropdownMenuItem(
-                            value: c.name,
-                            child: Text(
-                              c.name,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
+                        value: c.name,
+                        child: Text(
+                          c.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
                         .toList(),
                     onChanged: _busy ? null : (s) => _category = s,
                     validator: (s) =>
-                        s == null ? 'Add a category in Settings first.' : null,
+                    s == null ? 'Add a category in Settings first.' : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -797,9 +815,9 @@ class _ItemEditorState extends State<_ItemEditor> {
 }
 
 Future<void> showScanner(
-  BuildContext context,
-  SmartStockController controller,
-) async {
+    BuildContext context,
+    SmartStockController controller,
+    ) async {
   await showDialog<void>(
     context: context,
     builder: (_) => _ScannerDialog(controller: controller),

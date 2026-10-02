@@ -31,7 +31,7 @@ class SmartStockController extends ChangeNotifier {
     ExportService? exports,
     NotificationService? notifications,
   }) : database = database ?? DatabaseService(),
-       notifications = notifications ?? NotificationService() {
+        notifications = notifications ?? NotificationService() {
     this.exports = exports ?? ExportService(this.database);
     lowStockMonitor = LowStockMonitor(
       this.database.getAllInventory,
@@ -77,9 +77,15 @@ class SmartStockController extends ChangeNotifier {
 
   Timer? _scheduler;
   bool schedulerRunning = false;
-  int schedulerIntervalMinutes = 60;
+  int schedulerIntervalDays = 1;
   ScheduledFormat schedulerFormat = ScheduledFormat.xlsxOnly;
   String schedulerOutputDirectory = '';
+
+  Timer? _auditScheduler;
+  bool auditSchedulerRunning = false;
+  int auditSchedulerIntervalDays = 7;
+  ScheduledFormat auditSchedulerFormat = ScheduledFormat.xlsxOnly;
+  String auditSchedulerOutputDirectory = '';
 
   int get inventoryTotalPages {
     final pages = (inventoryPage.total / DatabaseService.inventoryPageSize)
@@ -162,7 +168,7 @@ class SmartStockController extends ChangeNotifier {
     }
     if (selectedItem != null) {
       final matching = inventoryPage.items.where(
-        (i) => i.id == selectedItem!.id,
+            (i) => i.id == selectedItem!.id,
       );
       selectedItem = matching.isEmpty ? null : matching.first;
     }
@@ -246,11 +252,11 @@ class SmartStockController extends ChangeNotifier {
   }
 
   Future<void> adjustStock(
-    InventoryItem item,
-    int amount, {
-    required bool restock,
-    String notes = '',
-  }) async {
+      InventoryItem item,
+      int amount, {
+        required bool restock,
+        String notes = '',
+      }) async {
     await database.adjustStock(
       itemId: item.id,
       amount: amount,
@@ -258,7 +264,7 @@ class SmartStockController extends ChangeNotifier {
       notes: notes,
     );
     statusMessage =
-        '${restock ? 'Restocked' : 'Dispensed'} $amount unit(s) for \'${item.name}\'.';
+    '${restock ? 'Restocked' : 'Dispensed'} $amount unit(s) for \'${item.name}\'.';
     await _refreshAfterInventoryMutation();
   }
 
@@ -300,8 +306,19 @@ class SmartStockController extends ChangeNotifier {
     if (notify) notifyListeners();
   }
 
-  Future<void> importInventory() async {
-    final result = await exports.importInventoryFile();
+  Future<void> importInventory() =>
+      _importInventoryWith(exports.importInventoryFile);
+
+  Future<void> importInventoryCsv() =>
+      _importInventoryWith(exports.importInventoryCsv);
+
+  Future<void> importInventoryXlsx() =>
+      _importInventoryWith(exports.importInventoryXlsx);
+
+  Future<void> _importInventoryWith(
+      Future<CsvImportResult?> Function() pickAndImport,
+      ) async {
+    final result = await pickAndImport();
     if (result == null) return;
     statusMessage = result.skippedDuplicates.isEmpty
         ? 'Imported ${result.imported} item(s).'
@@ -502,7 +519,7 @@ class SmartStockController extends ChangeNotifier {
   Future<void> resetInventory() async {
     await database.resetInventory();
     statusMessage =
-        'All inventory items were cleared. Categories were preserved.';
+    'All inventory items were cleared. Categories were preserved.';
     await _refreshAfterInventoryMutation();
   }
 
@@ -517,25 +534,39 @@ class SmartStockController extends ChangeNotifier {
     return path;
   }
 
+  Future<String?> chooseAuditSchedulerDirectory() async {
+    final path = await FilePicker.getDirectoryPath(
+      dialogTitle: 'Choose scheduled Audit Log folder',
+    );
+    if (path != null) {
+      auditSchedulerOutputDirectory = path;
+      notifyListeners();
+    }
+    return path;
+  }
+
   void startScheduler({
-    required int minutes,
+    required int days,
     required ScheduledFormat format,
     required String directory,
   }) {
-    if (minutes < 5)
-      throw ArgumentError('Interval must be at least 5 minutes.');
-    if (directory.trim().isEmpty)
+    if (days < 1) {
+      throw ArgumentError('Interval must be at least 1 day.');
+    }
+    if (directory.trim().isEmpty) {
       throw ArgumentError('Choose an output folder first.');
+    }
     _scheduler?.cancel();
-    schedulerIntervalMinutes = minutes;
+    schedulerIntervalDays = days;
     schedulerFormat = format;
     schedulerOutputDirectory = directory.trim();
     schedulerRunning = true;
     _scheduler = Timer.periodic(
-      Duration(minutes: minutes),
-      (_) => unawaited(_schedulerFire()),
+      Duration(days: days),
+          (_) => unawaited(_schedulerFire()),
     );
-    statusMessage = 'Scheduler started: ${format.label} every $minutes min.';
+    statusMessage =
+    'Scheduler started: ${format.label} every $days day(s).';
     notifyListeners();
   }
 
@@ -578,10 +609,82 @@ class SmartStockController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void startAuditScheduler({
+    required int days,
+    required ScheduledFormat format,
+    required String directory,
+  }) {
+    if (days < 1) {
+      throw ArgumentError('Interval must be at least 1 day.');
+    }
+    if (directory.trim().isEmpty) {
+      throw ArgumentError('Choose an output folder first.');
+    }
+    _auditScheduler?.cancel();
+    auditSchedulerIntervalDays = days;
+    auditSchedulerFormat = format;
+    auditSchedulerOutputDirectory = directory.trim();
+    auditSchedulerRunning = true;
+    _auditScheduler = Timer.periodic(
+      Duration(days: days),
+          (_) => unawaited(_auditSchedulerFire()),
+    );
+    statusMessage =
+    'Audit scheduler started: ${format.label} every $days day(s).';
+    notifyListeners();
+  }
+
+  void stopAuditScheduler() {
+    _auditScheduler?.cancel();
+    _auditScheduler = null;
+    auditSchedulerRunning = false;
+    statusMessage = 'Audit scheduler stopped.';
+    notifyListeners();
+  }
+
+  Future<void> _auditSchedulerFire() async {
+    final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    var wroteAny = false;
+    try {
+      if (auditSchedulerFormat == ScheduledFormat.xlsxOnly ||
+          auditSchedulerFormat == ScheduledFormat.xlsxAndPdf) {
+        final bytes = await exports.buildAuditXlsx(auditFilter);
+        wroteAny |= await writeScheduledFile(
+          auditSchedulerOutputDirectory,
+          'audit_$stamp.xlsx',
+          bytes,
+        );
+      }
+      if (auditSchedulerFormat == ScheduledFormat.pdfOnly ||
+          auditSchedulerFormat == ScheduledFormat.xlsxAndPdf) {
+        final bytes = await exports.buildAuditPdf(auditFilter);
+        wroteAny |= await writeScheduledFile(
+          auditSchedulerOutputDirectory,
+          'audit_$stamp.pdf',
+          bytes,
+        );
+      }
+      statusMessage = wroteAny
+          ? 'Scheduled Audit Log generated (${auditSchedulerFormat.label}): $stamp'
+          : 'Scheduled Audit Log exports require a writable folder on this platform.';
+      if (wroteAny) {
+        notifications.show(
+          'Scheduled Audit Export Successful',
+          'Your scheduled Audit Log export was saved successfully.',
+        );
+      }
+    } catch (e) {
+      statusMessage = 'Scheduled Audit Log export failed: $e';
+    }
+    notifyListeners();
+  }
+
   Future<void> shutdown() async {
     lowStockMonitor.dispose();
     _scheduler?.cancel();
     _scheduler = null;
+    _auditScheduler?.cancel();
+    _auditScheduler = null;
     try {
       await database.close(encrypt: true);
     } catch (_) {
@@ -593,6 +696,7 @@ class SmartStockController extends ChangeNotifier {
   void dispose() {
     lowStockMonitor.dispose();
     _scheduler?.cancel();
+    _auditScheduler?.cancel();
     super.dispose();
   }
 }
