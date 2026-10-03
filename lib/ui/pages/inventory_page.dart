@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../core/app_theme.dart';
 import '../../models/models.dart';
 import '../../state/smartstock_controller.dart';
@@ -1150,17 +1152,44 @@ class _ScannerPageState extends State<_ScannerPage> {
   final field = TextEditingController();
   final focus = FocusNode();
   final List<InventoryItem> _session = [];
+  MobileScannerController? _cameraController;
   bool _busy = false;
   String? _error;
 
+  bool get _runningWidgetTest => WidgetsBinding.instance.runtimeType
+      .toString()
+      .contains('TestWidgetsFlutterBinding');
+
+  bool get _cameraSupported =>
+      !kIsWeb &&
+      defaultTargetPlatform == TargetPlatform.android &&
+      !_runningWidgetTest;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_cameraSupported) {
+      _cameraController = MobileScannerController(
+        facing: CameraFacing.back,
+        detectionSpeed: DetectionSpeed.noDuplicates,
+        autoZoom: true,
+      );
+    }
+  }
+
   @override
   void dispose() {
+    final camera = _cameraController;
+    _cameraController = null;
+    if (camera != null) {
+      unawaited(camera.dispose());
+    }
     field.dispose();
     focus.dispose();
     super.dispose();
   }
 
-  Future<void> _find() async {
+  Future<void> _find({bool requestFocusAfter = true}) async {
     if (_busy) return;
     final sku = field.text.trim();
     if (sku.isEmpty) {
@@ -1191,7 +1220,7 @@ class _ScannerPageState extends State<_ScannerPage> {
         );
         if (mounted) {
           field.clear();
-          focus.requestFocus();
+          if (requestFocusAfter) focus.requestFocus();
         }
       }
     } catch (e) {
@@ -1201,9 +1230,44 @@ class _ScannerPageState extends State<_ScannerPage> {
     }
   }
 
+  Future<void> _handleCameraDetection(BarcodeCapture capture) async {
+    if (_busy) return;
+    String? value;
+    for (final barcode in capture.barcodes) {
+      final raw = barcode.rawValue?.trim();
+      if (raw != null && raw.isNotEmpty) {
+        value = raw;
+        break;
+      }
+    }
+    if (value == null) return;
+
+    field.text = value;
+    final camera = _cameraController;
+    try {
+      await camera?.stop();
+      await _find(requestFocusAfter: false);
+    } finally {
+      if (mounted && camera != null) {
+        try {
+          await camera.start();
+        } on MobileScannerException catch (e) {
+          if (mounted) {
+            setState(() {
+              _error = e.errorCode == MobileScannerErrorCode.permissionDenied
+                  ? 'Camera permission was denied. You can still use a USB scanner or enter the barcode manually.'
+                  : 'Could not restart the camera scanner.';
+            });
+          }
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final camera = _cameraController;
     return PopScope(
       canPop: !_busy,
       child: Scaffold(
@@ -1222,7 +1286,14 @@ class _ScannerPageState extends State<_ScannerPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 children: [
-                  _ScannerTarget(busy: _busy),
+                  if (_cameraSupported && camera != null)
+                    _CameraScannerTarget(
+                      controller: camera,
+                      busy: _busy,
+                      onDetect: _handleCameraDetection,
+                    )
+                  else
+                    _ScannerTarget(busy: _busy),
                   const SizedBox(height: 14),
                   Card(
                     child: Padding(
@@ -1238,7 +1309,9 @@ class _ScannerPageState extends State<_ScannerPage> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Use a connected barcode scanner, or enter the barcode / SKU manually.',
+                            _cameraSupported
+                                ? 'Point your phone camera at a barcode, use a connected scanner, or enter the barcode / SKU manually.'
+                                : 'Use a connected barcode scanner, or enter the barcode / SKU manually.',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -1248,7 +1321,7 @@ class _ScannerPageState extends State<_ScannerPage> {
                             controller: field,
                             focusNode: focus,
                             enabled: !_busy,
-                            autofocus: true,
+                            autofocus: !_cameraSupported,
                             autocorrect: false,
                             enableSuggestions: false,
                             textInputAction: TextInputAction.search,
@@ -1320,6 +1393,222 @@ class _ScannerPageState extends State<_ScannerPage> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CameraScannerTarget extends StatelessWidget {
+  const _CameraScannerTarget({
+    required this.controller,
+    required this.busy,
+    required this.onDetect,
+  });
+
+  final MobileScannerController controller;
+  final bool busy;
+  final ValueChanged<BarcodeCapture> onDetect;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      label: 'Camera barcode scanner. Align a barcode within the frame.',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: SizedBox(
+          height: 300,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              MobileScanner(
+                controller: controller,
+                fit: BoxFit.cover,
+                tapToFocus: true,
+                onDetect: busy ? null : onDetect,
+                errorBuilder: (context, error) => _CameraScannerError(
+                  error: error,
+                  onRetry: () => unawaited(controller.start()),
+                ),
+                placeholderBuilder: (context) => ColoredBox(
+                  color: theme.colorScheme.primary,
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+              ),
+              IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: .20),
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: .28),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Center(
+                child: Container(
+                  width: 220,
+                  height: 132,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white, width: 3),
+                  ),
+                  child: Center(
+                    child: Container(
+                      height: 2,
+                      margin: const EdgeInsets.symmetric(horizontal: 20),
+                      color: theme.colorScheme.tertiary,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 14,
+                right: 14,
+                child: ValueListenableBuilder<MobileScannerState>(
+                  valueListenable: controller,
+                  builder: (context, state, _) {
+                    if (state.torchState == TorchState.unavailable) {
+                      return const SizedBox.shrink();
+                    }
+                    return IconButton.filled(
+                      tooltip: state.torchState == TorchState.on
+                          ? 'Turn flash off'
+                          : 'Turn flash on',
+                      onPressed: busy
+                          ? null
+                          : () => unawaited(controller.toggleTorch()),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black.withValues(alpha: .45),
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: Icon(
+                        state.torchState == TorchState.on
+                            ? Icons.flash_on_rounded
+                            : Icons.flash_off_rounded,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Positioned(
+                left: 24,
+                right: 24,
+                bottom: 18,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: .48),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 9,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (busy)
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        else
+                          const Icon(
+                            Icons.qr_code_scanner,
+                            size: 18,
+                            color: Colors.white,
+                          ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            busy
+                                ? 'Looking up scanned item…'
+                                : 'Align a barcode inside the frame',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CameraScannerError extends StatelessWidget {
+  const _CameraScannerError({required this.error, required this.onRetry});
+
+  final MobileScannerException error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final denied = error.errorCode == MobileScannerErrorCode.permissionDenied;
+    final unsupported = error.errorCode == MobileScannerErrorCode.unsupported;
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.primary,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.no_photography_outlined, color: Colors.white, size: 42),
+            const SizedBox(height: 12),
+            Text(
+              denied
+                  ? 'Camera permission is off'
+                  : unsupported
+                      ? 'Camera scanning is unavailable'
+                      : 'Camera scanner could not start',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              denied
+                  ? 'Allow Camera permission for SmartStock, or use the manual / hardware scanner field below.'
+                  : 'You can still use a connected barcode scanner or enter the barcode manually.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.white.withValues(alpha: .85),
+                  ),
+            ),
+            if (!unsupported) ...[
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: onRetry,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white70),
+                ),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry camera'),
+              ),
+            ],
+          ],
         ),
       ),
     );
