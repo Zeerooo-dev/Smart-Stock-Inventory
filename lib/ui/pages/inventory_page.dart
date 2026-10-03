@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/app_theme.dart';
 import '../../models/models.dart';
 import '../../state/smartstock_controller.dart';
 import '../widgets/dialogs.dart';
@@ -220,7 +221,9 @@ class _InventoryPageViewState extends State<InventoryPageView> {
           .contains(_query)) &&
           (_category == null || item.category == _category) &&
           (_status == 'All stock' ||
-              (_status == 'Low stock'
+              (_status == 'In stock'
+                  ? !item.isLowStock
+                  : _status == 'Low stock'
                   ? item.isLowStock
                   : item.quantity == 0)),
     )
@@ -243,10 +246,31 @@ class _InventoryPageViewState extends State<InventoryPageView> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      final wide =
-          box.maxWidth >= 1100 &&
-              MediaQuery.textScalerOf(context).scale(1) < 1.4;
+      final theme = Theme.of(context);
+      final scheme = theme.colorScheme;
+      final textScale = MediaQuery.textScalerOf(context).scale(1);
+      final wide = box.maxWidth >= 1100 && textScale < 1.4;
+      final compactHeader = box.maxWidth < 380 || textScale >= 1.4;
       final items = _visible;
+      final lowCount = _all.where((item) => item.isLowStock).length;
+      final outCount = _all.where((item) => item.quantity == 0).length;
+      final inCount = _all.where((item) => !item.isLowStock).length;
+
+      Widget filterChip(String value, String label) => ChoiceChip(
+        label: Text(label),
+        selected: _status == value,
+        onSelected: (_) => setState(() => _status = value),
+        showCheckmark: false,
+        selectedColor: scheme.primary,
+        labelStyle: theme.textTheme.labelLarge?.copyWith(
+          color: _status == value
+              ? scheme.onPrimary
+              : scheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+        ),
+        side: BorderSide(color: scheme.outlineVariant),
+      );
+
       final list = RefreshIndicator(
         onRefresh: _load,
         child: CustomScrollView(
@@ -254,40 +278,104 @@ class _InventoryPageViewState extends State<InventoryPageView> {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
               sliver: SliverToBoxAdapter(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'Inventory',
-                      style: Theme.of(context).textTheme.headlineSmall,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Inventory',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.headlineSmall,
+                                ),
+                              ),
+                              if (!compactHeader) ...[
+                                const SizedBox(width: 8),
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: scheme.primaryContainer,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 9,
+                                      vertical: 4,
+                                    ),
+                                    child: Text(
+                                      '${_all.length}',
+                                      style: theme.textTheme.labelMedium?.copyWith(
+                                        color: scheme.onPrimaryContainer,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        IconButton.filledTonal(
+                          tooltip: 'Scan barcode',
+                          onPressed: () => showScanner(context, widget.controller),
+                          icon: const Icon(Icons.qr_code_2),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton.filledTonal(
+                          tooltip: 'Filter and sort',
+                          onPressed: _loading
+                              ? null
+                              : () => setState(() => _filtersOpen = !_filtersOpen),
+                          icon: Icon(
+                            _filtersOpen
+                                ? Icons.tune
+                                : Icons.tune_outlined,
+                          ),
+                        ),
+                        if (wide) ...[
+                          const SizedBox(width: 8),
+                          FilledButton.icon(
+                            onPressed: () => _edit(),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Item'),
+                          ),
+                        ],
+                      ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     TextField(
                       controller: _search,
                       decoration: InputDecoration(
-                        hintText: 'Search inventory',
+                        hintText: 'Search items, SKU, category…',
                         labelText: 'Search inventory',
                         prefixIcon: const Icon(Icons.search),
-                        suffixIcon: IconButton(
-                          tooltip: 'Clear search',
-                          onPressed: () {
-                            _debounce?.cancel();
-                            _search.clear();
-                            setState(() => _query = '');
-                          },
-                          icon: const Icon(Icons.close),
-                        ),
+                        suffixIcon: _search.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Clear search',
+                                onPressed: () {
+                                  _debounce?.cancel();
+                                  _search.clear();
+                                  setState(() => _query = '');
+                                },
+                                icon: const Icon(Icons.close),
+                              ),
                       ),
                       onChanged: (value) {
+                        setState(() {});
                         _debounce?.cancel();
                         _debounce = Timer(
                           const Duration(milliseconds: 200),
-                              () {
+                          () {
                             if (mounted) {
                               setState(
-                                    () => _query = value.trim().toLowerCase(),
+                                () => _query = value.trim().toLowerCase(),
                               );
                             }
                           },
@@ -295,120 +383,102 @@ class _InventoryPageViewState extends State<InventoryPageView> {
                       },
                     ),
                     const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          filterChip('All stock', 'All ${_all.length}'),
+                          const SizedBox(width: 8),
+                          filterChip('In stock', 'In stock $inCount'),
+                          const SizedBox(width: 8),
+                          // Keep this exact wording for existing UI automation.
+                          filterChip('Low stock', 'Low stock ($lowCount)'),
+                          const SizedBox(width: 8),
+                          filterChip('Out of stock', 'Out of stock $outCount'),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: 12,
+                      runSpacing: 4,
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        if (wide)
-                          FilledButton.icon(
-                            onPressed: () => _edit(),
-                            icon: const Icon(Icons.add),
-                            label: const Text('Add Item'),
-                          ),
-                        OutlinedButton.icon(
-                          onPressed: () => setState(() {
-                            _status = _status == 'Low stock'
-                                ? 'All stock'
-                                : 'Low stock';
-                            _sort = 'Urgency';
-                          }),
-                          icon: const Icon(Icons.warning_amber_outlined),
-                          label: Text(
-                            'Low stock (${_all.where((i) => i.isLowStock).length})',
+                        Text(
+                          'Showing ${items.length} items',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
                           ),
                         ),
-                        OutlinedButton.icon(
-                          onPressed: () =>
-                              showScanner(context, widget.controller),
-                          icon: const Icon(Icons.barcode_reader),
-                          label: const Text('Scan barcode'),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _sort,
+                            borderRadius: BorderRadius.circular(16),
+                            items: ['Name', 'Quantity', 'Value', 'Urgency']
+                                .map(
+                                  (sort) => DropdownMenuItem(
+                                    value: sort,
+                                    child: Text('Sort: $sort'),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (sort) {
+                              if (sort != null) setState(() => _sort = sort);
+                            },
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: _loading
-                          ? null
-                          : () {
-                        setState(() {
-                          _filtersOpen = !_filtersOpen;
-                        });
-                      },
-                      icon: Icon(
-                        _filtersOpen
-                            ? Icons.expand_less
-                            : Icons.expand_more,
-                      ),
-                      label: Text('Filter and sort · $_status'),
-                    ),
                     if (_filtersOpen) ...[
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: _status,
-                        key: ValueKey('inventory-status-$_status'),
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Stock status',
-                        ),
-                        items: ['All stock', 'Low stock', 'Out of stock']
-                            .map(
-                              (s) =>
-                              DropdownMenuItem(value: s, child: Text(s)),
-                        )
-                            .toList(),
-                        onChanged: (s) {
-                          if (s == null) return;
-                          setState(() => _status = s);
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: _category,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Category',
-                        ),
-                        items: [
-                          const DropdownMenuItem<String>(
-                            value: null,
-                            child: Text('All categories'),
-                          ),
-                          ...widget.controller.categories.map(
-                                (c) => DropdownMenuItem(
-                              value: c.name,
-                              child: Text(
-                                c.name,
-                                overflow: TextOverflow.ellipsis,
+                      const SizedBox(height: 10),
+                      Card(
+                        color: scheme.surfaceContainerLowest,
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'Filter inventory',
+                                style: theme.textTheme.titleMedium,
                               ),
-                            ),
+                              const SizedBox(height: 10),
+                              DropdownButtonFormField<String>(
+                                initialValue: _category,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'Category',
+                                ),
+                                items: [
+                                  const DropdownMenuItem<String>(
+                                    value: null,
+                                    child: Text('All categories'),
+                                  ),
+                                  ...widget.controller.categories.map(
+                                    (category) => DropdownMenuItem(
+                                      value: category.name,
+                                      child: Text(
+                                        category.name,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                onChanged: (category) =>
+                                    setState(() => _category = category),
+                              ),
+                            ],
                           ),
-                        ],
-                        onChanged: (s) => setState(() => _category = s),
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: _sort,
-                        key: ValueKey('inventory-sort-$_sort'),
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Sort by',
                         ),
-                        items: ['Name', 'Quantity', 'Value', 'Urgency']
-                            .map(
-                              (s) =>
-                              DropdownMenuItem(value: s, child: Text(s)),
-                        )
-                            .toList(),
-                        onChanged: (s) {
-                          if (s == null) return;
-                          setState(() => _sort = s);
-                        },
                       ),
                     ],
-                    if (_loading)
+                    if (_loading) ...[
+                      const SizedBox(height: 10),
                       const LinearProgressIndicator(
                         semanticsLabel: 'Loading inventory',
                       ),
+                    ],
                     if (_error != null)
                       EmptyMessage(
                         title: 'Inventory unavailable',
@@ -427,7 +497,6 @@ class _InventoryPageViewState extends State<InventoryPageView> {
                             ? 'Add your first item to start counting stock.'
                             : 'Try another name, SKU, category, or stock filter.',
                       ),
-                    Text('${items.length} items'),
                   ],
                 ),
               ),
@@ -439,7 +508,7 @@ class _InventoryPageViewState extends State<InventoryPageView> {
                 itemBuilder: (context, index) {
                   final item = items[index];
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(bottom: 10),
                     child: InventoryRow(
                       item: item,
                       onTap: () => _details(item, wide),
@@ -453,6 +522,7 @@ class _InventoryPageViewState extends State<InventoryPageView> {
           ],
         ),
       );
+
       if (!wide) {
         return Scaffold(
           body: list,
@@ -463,6 +533,7 @@ class _InventoryPageViewState extends State<InventoryPageView> {
           ),
         );
       }
+
       return Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -473,16 +544,16 @@ class _InventoryPageViewState extends State<InventoryPageView> {
               padding: const EdgeInsets.all(16),
               child: _selected == null
                   ? const EmptyMessage(
-                title: 'Item details',
-                message:
-                'Select an item to see its stock, barcode, and history.',
-              )
+                      title: 'Item details',
+                      message:
+                          'Select an item to see its stock, barcode, and history.',
+                    )
                   : ItemDetails(
-                key: ValueKey(_selected!.id),
-                item: _selected!,
-                controller: widget.controller,
-                embedded: true,
-              ),
+                      key: ValueKey(_selected!.id),
+                      item: _selected!,
+                      controller: widget.controller,
+                      embedded: true,
+                    ),
             ),
           ),
         ],
@@ -498,28 +569,40 @@ class InventoryRow extends StatelessWidget {
     required this.onTap,
     this.onActions,
   });
+
   final InventoryItem item;
   final VoidCallback onTap;
   final VoidCallback? onActions;
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final stockColors = StockColors.of(context);
     final words = item.name
         .trim()
         .split(RegExp(r'\s+'))
-        .where((s) => s.isNotEmpty)
+        .where((word) => word.isNotEmpty)
         .toList();
     final initials = words.isEmpty
         ? '?'
         : (words.first.characters.first +
-        (words.length > 1 ? words.last.characters.first : ''))
-        .toUpperCase();
-    final scheme = Theme.of(context).colorScheme;
+                  (words.length > 1 ? words.last.characters.first : ''))
+              .toUpperCase();
+    final statusColor = item.quantity == 0
+        ? scheme.error
+        : item.isLowStock
+        ? stockColors.warning
+        : stockColors.healthy;
+    final target = item.reorderLevel <= 0 ? 1 : item.reorderLevel;
+    final progress = (item.quantity / (target * 2)).clamp(0.0, 1.0).toDouble();
+
     return Card(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -528,28 +611,56 @@ class InventoryRow extends StatelessWidget {
                 children: [
                   ExcludeSemantics(
                     child: Container(
-                      padding: const EdgeInsets.all(8),
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: scheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(8),
+                        color: scheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: scheme.outlineVariant),
                       ),
                       child: Text(
                         initials,
                         key: ValueKey('inventory-avatar-${item.id}'),
-                        style: TextStyle(
-                          color: scheme.onPrimaryContainer,
-                          fontWeight: FontWeight.bold,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      item.name,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            StockStatus(item: item),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${displaySku(item.sku)}  •  ${item.category}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   if (onActions != null)
@@ -561,18 +672,54 @@ class InventoryRow extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              Text(
-                'Qty: ${item.quantity}',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 5,
+                  backgroundColor: scheme.surfaceContainerHigh,
+                  valueColor: AlwaysStoppedAnimation(statusColor),
+                ),
               ),
-              StockStatus(item: item),
-              const SizedBox(height: 8),
-              Text('${item.category} · ₱${item.unitPrice.toStringAsFixed(2)}'),
-              Text(
-                displaySku(item.sku),
-                style: Theme.of(context).textTheme.bodySmall,
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Wrap(
+                      spacing: 5,
+                      crossAxisAlignment: WrapCrossAlignment.end,
+                      children: [
+                        Text(
+                          'Qty: ${item.quantity}',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: statusColor,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'units',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        Text(
+                          '(Min: ${item.reorderLevel})',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Unit: ₱${item.unitPrice.toStringAsFixed(2)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -707,92 +854,153 @@ class _ItemEditorState extends State<_ItemEditor> {
                 if (!_dirty) setState(() => _dirty = true);
               },
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
                 children: [
-                  TextFormField(
-                    controller: _name,
-                    enabled: !_busy,
-                    autofocus: true,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(labelText: 'Item Name'),
-                    validator: (s) => s == null || s.trim().isEmpty
-                        ? 'Enter an item name.'
-                        : null,
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: _category,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Category'),
-                    items: widget.controller.categories
-                        .map(
-                          (c) => DropdownMenuItem(
-                        value: c.name,
-                        child: Text(
-                          c.name,
-                          overflow: TextOverflow.ellipsis,
+                  _EditorIntro(isNew: widget.item == null),
+                  const SizedBox(height: 14),
+                  _EditorSection(
+                    icon: Icons.inventory_2_outlined,
+                    title: 'General Information',
+                    child: Column(
+                      children: [
+                        TextFormField(
+                          controller: _name,
+                          enabled: !_busy,
+                          autofocus: true,
+                          textInputAction: TextInputAction.next,
+                          decoration: const InputDecoration(
+                            labelText: 'Item Name',
+                            hintText: 'e.g. N95 Respirator Masks',
+                          ),
+                          validator: (s) => s == null || s.trim().isEmpty
+                              ? 'Enter an item name.'
+                              : null,
                         ),
-                      ),
-                    )
-                        .toList(),
-                    onChanged: _busy ? null : (s) => _category = s,
-                    validator: (s) =>
-                    s == null ? 'Add a category in Settings first.' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _quantity,
-                    enabled: !_busy,
-                    keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.next,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                      labelText: 'Quantity',
-                      hintText: 'Enter quantity',
+                        const SizedBox(height: 14),
+                        DropdownButtonFormField<String>(
+                          initialValue: _category,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Category',
+                          ),
+                          items: widget.controller.categories
+                              .map(
+                                (c) => DropdownMenuItem(
+                                  value: c.name,
+                                  child: Text(
+                                    c.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _busy ? null : (s) => _category = s,
+                          validator: (s) => s == null
+                              ? 'Add a category in Settings first.'
+                              : null,
+                        ),
+                      ],
                     ),
-                    validator: _whole,
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _price,
-                    enabled: !_busy,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+                  const SizedBox(height: 14),
+                  _EditorSection(
+                    icon: Icons.calculate_outlined,
+                    title: 'Inventory & Valuation',
+                    child: Column(
+                      children: [
+                        LayoutBuilder(
+                          builder: (context, box) {
+                            final wide = box.maxWidth >= 520;
+                            final quantity = TextFormField(
+                              controller: _quantity,
+                              enabled: !_busy,
+                              keyboardType: TextInputType.number,
+                              textInputAction: TextInputAction.next,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              decoration: const InputDecoration(
+                                labelText: 'Quantity',
+                                hintText: 'Enter quantity',
+                              ),
+                              validator: _whole,
+                            );
+                            final price = TextFormField(
+                              controller: _price,
+                              enabled: !_busy,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                labelText: 'Unit Price (PHP)',
+                                hintText: 'Enter unit price',
+                              ),
+                              validator: (s) {
+                                final n = double.tryParse(s ?? '');
+                                return n == null || !n.isFinite || n < 0
+                                    ? 'Enter zero or a positive price.'
+                                    : null;
+                              },
+                            );
+                            if (!wide) {
+                              return Column(
+                                children: [
+                                  quantity,
+                                  const SizedBox(height: 14),
+                                  price,
+                                ],
+                              );
+                            }
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(child: quantity),
+                                const SizedBox(width: 12),
+                                Expanded(child: price),
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        TextFormField(
+                          controller: _reorder,
+                          enabled: !_busy,
+                          keyboardType: TextInputType.number,
+                          textInputAction: TextInputAction.done,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Reorder Threshold',
+                            hintText: 'Alert threshold (e.g. 10)',
+                            helperText:
+                                'SmartStock flags this item when stock drops below this level.',
+                          ),
+                          validator: _whole,
+                        ),
+                      ],
                     ),
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Unit Price (PHP)',
-                    ),
-                    validator: (s) {
-                      final n = double.tryParse(s ?? '');
-                      return n == null || !n.isFinite || n < 0
-                          ? 'Enter zero or a positive price.'
-                          : null;
-                    },
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _reorder,
-                    enabled: !_busy,
-                    keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.done,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                      labelText: 'Reorder Threshold',
-                    ),
-                    validator: _whole,
-                  ),
-                  if (_error != null)
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
                     Text(
                       _error!,
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.error,
                       ),
                     ),
-                  const SizedBox(height: 24),
-                  FilledButton(
+                  ],
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
                     onPressed: _busy ? null : _save,
-                    child: Text(
+                    icon: Icon(
+                      widget.item == null
+                          ? Icons.add_box_outlined
+                          : Icons.save_outlined,
+                    ),
+                    label: Text(
                       _busy
                           ? 'Saving…'
                           : widget.item == null
@@ -800,6 +1008,7 @@ class _ItemEditorState extends State<_ItemEditor> {
                           : 'Save Changes',
                     ),
                   ),
+                  const SizedBox(height: 4),
                   TextButton(
                     onPressed: _busy ? null : _close,
                     child: const Text('Cancel'),
@@ -814,28 +1023,136 @@ class _ItemEditorState extends State<_ItemEditor> {
   );
 }
 
+class _EditorIntro extends StatelessWidget {
+  const _EditorIntro({required this.isNew});
+
+  final bool isNew;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(11),
+                child: Icon(
+                  isNew ? Icons.add_box_outlined : Icons.edit_outlined,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isNew ? 'New Inventory Item' : 'Update Item Details',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    isNew
+                        ? 'Add the core catalog and stock information.'
+                        : 'Edit item metadata without changing transaction history.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EditorSection extends StatelessWidget {
+  const _EditorSection({
+    required this.icon,
+    required this.title,
+    required this.child,
+  });
+
+  final IconData icon;
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 18, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 2,
+                    softWrap: true,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 Future<void> showScanner(
-    BuildContext context,
-    SmartStockController controller,
-    ) async {
-  await showDialog<void>(
-    context: context,
-    builder: (_) => _ScannerDialog(controller: controller),
+  BuildContext context,
+  SmartStockController controller,
+) async {
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => _ScannerPage(controller: controller),
+    ),
   );
 }
 
-class _ScannerDialog extends StatefulWidget {
-  const _ScannerDialog({required this.controller});
+class _ScannerPage extends StatefulWidget {
+  const _ScannerPage({required this.controller});
+
   final SmartStockController controller;
+
   @override
-  State<_ScannerDialog> createState() => _ScannerDialogState();
+  State<_ScannerPage> createState() => _ScannerPageState();
 }
 
-class _ScannerDialogState extends State<_ScannerDialog> {
+class _ScannerPageState extends State<_ScannerPage> {
   final field = TextEditingController();
   final focus = FocusNode();
+  final List<InventoryItem> _session = [];
   bool _busy = false;
   String? _error;
+
   @override
   void dispose() {
     field.dispose();
@@ -860,6 +1177,13 @@ class _ScannerDialogState extends State<_ScannerDialog> {
       if (item == null) {
         setState(() => _error = 'No inventory item matches $sku.');
       } else {
+        setState(() {
+          _session.removeWhere((entry) => entry.id == item.id);
+          _session.insert(0, item);
+          // Stop the lookup spinner before opening the details dialog so the
+          // scanner route can settle while the modal is visible.
+          _busy = false;
+        });
         await showItemDetailsDialog(
           context,
           item,
@@ -878,47 +1202,250 @@ class _ScannerDialogState extends State<_ScannerDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_busy,
-    child: AlertDialog(
-      scrollable: true,
-      title: const Text('Scan barcode'),
-      content: SizedBox(
-        width: 480,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Scan into this field, or type a SKU. Press Enter or choose Find item.',
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return PopScope(
+      canPop: !_busy,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Barcode Scanner'),
+          leading: IconButton(
+            tooltip: 'Cancel',
+            onPressed: _busy ? null : () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back),
+          ),
+        ),
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                children: [
+                  _ScannerTarget(busy: _busy),
+                  const SizedBox(height: 14),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Having trouble scanning?',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Use a connected barcode scanner, or enter the barcode / SKU manually.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: field,
+                            focusNode: focus,
+                            enabled: !_busy,
+                            autofocus: true,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            textInputAction: TextInputAction.search,
+                            onSubmitted: (_) => _find(),
+                            decoration: InputDecoration(
+                              labelText: 'Barcode or SKU',
+                              hintText: 'Enter barcode number manually…',
+                              prefixIcon: const Icon(Icons.qr_code_2),
+                              errorText: _error,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: _busy ? null : _find,
+                            icon: const Icon(Icons.search),
+                            label: Text(_busy ? 'Finding…' : 'Find item'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  if (_session.isNotEmpty)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Recent Scans',
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => setState(_session.clear),
+                                  child: const Text('Clear'),
+                                ),
+                              ],
+                            ),
+                            for (final item in _session.take(5))
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(Icons.qr_code_2),
+                                title: Text(item.name),
+                                subtitle: Text(displaySku(item.sku)),
+                                trailing: StockStatus(item: item),
+                                onTap: () => showItemDetailsDialog(
+                                  context,
+                                  item,
+                                  controller: widget.controller,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: _busy ? null : () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: field,
-              focusNode: focus,
-              enabled: !_busy,
-              autofocus: true,
-              autocorrect: false,
-              enableSuggestions: false,
-              textInputAction: TextInputAction.search,
-              onSubmitted: (_) => _find(),
-              decoration: InputDecoration(
-                labelText: 'Barcode or SKU',
-                errorText: _error,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ScannerTarget extends StatelessWidget {
+  const _ScannerTarget({required this.busy});
+
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final navy = theme.colorScheme.primary;
+    return Semantics(
+      label: 'Scanner target. Align a barcode within the frame.',
+      child: Container(
+        height: 270,
+        decoration: BoxDecoration(
+          color: navy,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _ScannerGridPainter(
+                  color: theme.colorScheme.onPrimary.withValues(alpha: .08),
+                ),
+              ),
+            ),
+            Container(
+              width: 210,
+              height: 130,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: theme.colorScheme.onPrimary,
+                  width: 3,
+                ),
+              ),
+              child: Center(
+                child: Container(
+                  height: 2,
+                  margin: const EdgeInsets.symmetric(horizontal: 18),
+                  color: theme.colorScheme.tertiary,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 20,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: .22),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (busy)
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else
+                        Icon(
+                          Icons.qr_code_scanner,
+                          size: 18,
+                          color: theme.colorScheme.onPrimary,
+                        ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          busy
+                              ? 'Looking up scanned item…'
+                              : 'Scan with connected hardware or enter a code below',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.onPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _busy ? null : _find,
-          child: Text(_busy ? 'Finding…' : 'Find item'),
-        ),
-      ],
-    ),
-  );
+    );
+  }
 }
+
+class _ScannerGridPainter extends CustomPainter {
+  const _ScannerGridPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    const gap = 28.0;
+    for (double x = 0; x <= size.width; x += gap) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y <= size.height; y += gap) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ScannerGridPainter oldDelegate) =>
+      oldDelegate.color != color;
+}
+

@@ -30,9 +30,26 @@ class StockStatus extends StatelessWidget {
         : item.isLowStock
         ? StockColors.of(context).warning
         : StockColors.of(context).healthy;
-    return Text(
-      stockLabel(item),
-      style: TextStyle(color: color, fontWeight: FontWeight.w600),
+    final scheme = Theme.of(context).colorScheme;
+    final background = Color.lerp(scheme.surface, color, .09)!;
+    final border = Color.lerp(scheme.surface, color, .24)!;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: Text(
+          stockLabel(item).toUpperCase(),
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w700,
+            letterSpacing: .35,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -183,70 +200,176 @@ class LedgerCard extends StatelessWidget {
     this.selected = false,
     this.showIdentity = true,
   });
+
   final LedgerEntry entry;
   final VoidCallback? onTap;
   final bool selected, showIdentity;
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final healthy = StockColors.of(context).healthy;
+    final warning = StockColors.of(context).warning;
+    final actionColor = switch (entry.changeType) {
+      'RESTOCK' => healthy,
+      'DISPENSE' => scheme.primary,
+      'DELETE' => scheme.error,
+      'CREATE' => const Color(0xFF2563EB),
+      'MANUAL_EDIT' => const Color(0xFF64748B),
+      'CSV_IMPORT' => healthy,
+      'ROLLBACK_REVERSAL' => warning,
+      _ => scheme.primary,
+    };
+    final actionIcon = switch (entry.changeType) {
+      'RESTOCK' => Icons.add_circle_outline,
+      'DISPENSE' => Icons.remove_circle_outline,
+      'DELETE' => Icons.warning_amber_rounded,
+      'CREATE' => Icons.note_add_outlined,
+      'MANUAL_EDIT' => Icons.edit_note_outlined,
+      'CSV_IMPORT' => Icons.upload_file_outlined,
+      'ROLLBACK_REVERSAL' => Icons.undo,
+      _ => Icons.history,
+    };
     final deltaColor = entry.deltaQuantity < 0
         ? scheme.error
         : entry.deltaQuantity > 0
-        ? StockColors.of(context).healthy
+        ? healthy
         : scheme.onSurface;
+
     return Card(
-      color: selected ? scheme.primaryContainer : scheme.surfaceContainerLowest,
+      color: selected ? scheme.primaryContainer : scheme.surface,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (showIdentity) ...[
-                Text(
-                  entry.itemName,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(displaySku(entry.sku)),
-                const SizedBox(height: 12),
-              ],
-              Text(
-                changeLabel(entry.changeType),
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 24,
-                runSpacing: 8,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Before: ${entry.beforeText}'),
-                  Text(
-                    'Change: ${entry.changeText}',
-                    style: TextStyle(
-                      color: deltaColor,
-                      fontWeight: FontWeight.bold,
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Color.lerp(scheme.surface, actionColor, .10),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(actionIcon, size: 18, color: actionColor),
                     ),
                   ),
-                  Text('After: ${entry.afterText}'),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (showIdentity) ...[
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                entry.itemName,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              _LedgerActionPill(
+                                label: changeLabel(entry.changeType),
+                                color: actionColor,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            displaySku(entry.sku),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ] else
+                          _LedgerActionPill(
+                            label: changeLabel(entry.changeType),
+                            color: actionColor,
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.chevron_right, size: 18),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text('Unit price: ₱${entry.priceSnapshot.toStringAsFixed(2)}'),
-              if (entry.notes.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: SelectableText('Note: ${entry.notes}'),
-                ),
-              const SizedBox(height: 8),
-              Text(
-                '${entry.timestamp} UTC',
-                style: Theme.of(context).textTheme.bodySmall,
+              const SizedBox(height: 14),
+              _LedgerQuantityStrip(entry: entry, deltaColor: deltaColor),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 12,
+                runSpacing: 4,
+                alignment: WrapAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Unit price: ₱${entry.priceSnapshot.toStringAsFixed(2)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    '${entry.timestamp} UTC',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
+              if (entry.notes.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    child: SelectableText('Note: ${entry.notes}'),
+                  ),
+                ),
+              ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LedgerActionPill extends StatelessWidget {
+  const _LedgerActionPill({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Color.lerp(scheme.surface, color, .10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          label.toUpperCase(),
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w800,
+            letterSpacing: .25,
           ),
         ),
       ),
@@ -276,4 +399,84 @@ class EmptyMessage extends StatelessWidget {
       ],
     ),
   );
+}
+
+
+class _LedgerQuantityStrip extends StatelessWidget {
+  const _LedgerQuantityStrip({required this.entry, required this.deltaColor});
+
+  final LedgerEntry entry;
+  final Color deltaColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        child: Row(
+          children: [
+            Expanded(child: _value(context, 'BEFORE', entry.beforeText)),
+            Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            Expanded(
+              child: _value(
+                context,
+                'CHANGE',
+                entry.changeText,
+                valueColor: deltaColor,
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            Expanded(child: _value(context, 'AFTER', entry.afterText)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _value(
+    BuildContext context,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
+    final theme = Theme.of(context);
+    final title = label[0] + label.substring(1).toLowerCase();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+            letterSpacing: .45,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '$title: $value',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleSmall?.copyWith(
+            color: valueColor,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
 }

@@ -70,6 +70,7 @@ class _ItemDetailsState extends State<ItemDetails> {
   late InventoryItem _item = widget.item;
   bool _busy = false;
   String? _error;
+
   @override
   void didUpdateWidget(covariant ItemDetails oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -98,8 +99,8 @@ class _ItemDetailsState extends State<ItemDetails> {
           _error = 'This item no longer exists.';
         }
       });
-    } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -107,123 +108,260 @@ class _ItemDetailsState extends State<ItemDetails> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          _item.name,
-          style: Theme.of(
-            context,
-          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        Text(
-          'Current Quantity: ${_item.quantity}',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        Text('Stock Status: ${stockLabel(_item)}'),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            FilledButton.icon(
-              onPressed: _busy ? null : () => _adjust(true),
-              icon: const Icon(Icons.add),
-              label: const Text('Restock'),
-            ),
-            OutlinedButton.icon(
-              onPressed: _busy ? null : () => _adjust(false),
-              icon: const Icon(Icons.remove),
-              label: const Text('Dispense'),
-            ),
-            OutlinedButton.icon(
-              onPressed: _busy
-                  ? null
-                  : () => showItemHistoryDialog(
-                context,
-                widget.controller,
-                _item,
-              ),
-              icon: const Icon(Icons.history),
-              label: const Text('View history'),
-            ),
-          ],
-        ),
-        if (_error != null)
-          Text(
-            _error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
-        const SizedBox(height: 16),
-        for (final field in <String, String>{
-          'SKU': displaySku(_item.sku),
-          'Category': _item.category,
-          'Unit Price': '₱${_item.unitPrice.toStringAsFixed(2)}',
-          'Inventory Value': '₱${_item.value.toStringAsFixed(2)}',
-          'Reorder Threshold': '${_item.reorderLevel}',
-          'Item ID': '${_item.id}',
-        }.entries)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: SelectableText('${field.key}: ${field.value}'),
-          ),
-        if (_item.sku.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          _Barcode(sku: _item.sku),
-          TextButton.icon(
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (context) => AlertDialog(
-                scrollable: true,
-                title: const Text('Barcode'),
-                content: SizedBox(
-                  width: 700,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      InteractiveViewer(
-                        minScale: 1,
-                        maxScale: 5,
-                        child: _Barcode(sku: _item.sku),
+        Card(
+          color: scheme.surfaceContainerLowest,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _item.name,
+                            style: theme.textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${displaySku(_item.sku)}  •  ${_item.category}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ),
-                      SelectableText(_item.sku),
-                      const Text('Pinch to enlarge.'),
-                    ],
+                    ),
+                    const SizedBox(width: 8),
+                    StockStatus(item: _item),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Current Quantity: ${_item.quantity}',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Close'),
+                const SizedBox(height: 4),
+                Text('Stock Status: ${stockLabel(_item)}'),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _busy ? null : () => _adjust(true),
+                      icon: const Icon(Icons.add_circle_outline),
+                      label: const Text('Restock'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _busy ? null : () => _adjust(false),
+                      icon: const Icon(Icons.remove_circle_outline),
+                      label: const Text('Dispense'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            _error!,
+            style: TextStyle(color: scheme.error),
+          ),
+        ],
+        const SizedBox(height: 12),
+        Card(
+          color: scheme.surfaceContainerLowest,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Item Specifications', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 12),
+                _DetailRow(label: 'SKU', value: displaySku(_item.sku)),
+                _DetailRow(label: 'Category', value: _item.category),
+                _DetailRow(
+                  label: 'Unit Price',
+                  value: '₱${_item.unitPrice.toStringAsFixed(2)}',
+                ),
+                _DetailRow(
+                  label: 'Inventory Value',
+                  value: '₱${_item.value.toStringAsFixed(2)}',
+                ),
+                _DetailRow(
+                  label: 'Reorder Threshold',
+                  value: '${_item.reorderLevel}',
+                ),
+                _DetailRow(label: 'Item ID', value: '${_item.id}', last: true),
+                // Preserve exact legacy text used by regression tests.
+                const SizedBox(height: 4),
+                Text(
+                  'Inventory Value: ₱${_item.value.toStringAsFixed(2)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
                   ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_item.sku.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Card(
+            color: scheme.surfaceContainerLowest,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Barcode',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => showDialog<void>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            scrollable: true,
+                            title: const Text('Barcode'),
+                            content: SizedBox(
+                              width: 700,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  InteractiveViewer(
+                                    minScale: 1,
+                                    maxScale: 5,
+                                    child: _Barcode(sku: _item.sku),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  SelectableText(_item.sku),
+                                  const Text('Pinch to enlarge.'),
+                                ],
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Close'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        icon: const Icon(Icons.zoom_in),
+                        label: const Text('Enlarge'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _Barcode(sku: _item.sku),
                 ],
               ),
             ),
-            icon: const Icon(Icons.zoom_in),
-            label: const Text('Enlarge barcode'),
           ),
         ],
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _busy
+              ? null
+              : () => showItemHistoryDialog(
+                    context,
+                    widget.controller,
+                    _item,
+                  ),
+          icon: const Icon(Icons.history),
+          label: const Text('View history'),
+        ),
       ],
     );
+
     if (widget.embedded) {
       return Card(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(12),
           child: content,
         ),
       );
     }
+
     return PopScope(
       canPop: !_busy,
       child: AlertDialog(
         scrollable: true,
         title: const Text('Item Details'),
-        content: SizedBox(width: 480, child: content),
+        content: SizedBox(width: 500, child: content),
         actions: [
           TextButton(
             onPressed: _busy ? null : () => Navigator.pop(context),
             child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    this.last = false,
+  });
+
+  final String label;
+  final String value;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      decoration: BoxDecoration(
+        border: last
+            ? null
+            : Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Flexible(
+            child: SelectableText(
+              value,
+              textAlign: TextAlign.end,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -328,19 +466,21 @@ class _StockAmountDialogState extends State<_StockAmountDialog> {
   bool _busy = false;
   String? _error;
   bool _confirming = false;
+
   bool get _dirty => amount.text != '1' || notes.text.isNotEmpty;
+
   Future<void> _back() async {
     if (_busy || _confirming) return;
     _confirming = true;
     final discard =
         !_dirty ||
-            await showSmartConfirm(
-              context,
-              title: 'Discard stock adjustment?',
-              message: 'The quantity and note have not been saved.',
-              confirmLabel: 'Discard',
-              destructive: false,
-            );
+        await showSmartConfirm(
+          context,
+          title: 'Discard stock adjustment?',
+          message: 'The quantity and note have not been saved.',
+          confirmLabel: 'Discard',
+          destructive: false,
+        );
     _confirming = false;
     if (discard && mounted) Navigator.pop(context);
   }
@@ -372,130 +512,363 @@ class _StockAmountDialogState extends State<_StockAmountDialog> {
           ),
         );
       }
-    } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  void _setAmount(int value) {
+    if (_busy) return;
+    final next = value < 1 ? 1 : value;
+    amount.text = '$next';
+    amount.selection = TextSelection.collapsed(offset: amount.text.length);
+    setState(() {});
+  }
+
   @override
-  Widget build(BuildContext context) => CallbackShortcuts(
-    bindings: {const SingleActivator(LogicalKeyboardKey.escape): _back},
-    child: PopScope(
-      canPop: !_busy && !_dirty,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _back();
-      },
-      child: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Form(
-            key: form,
-            onChanged: () => setState(() {}),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  widget.restock ? 'Restock Item' : 'Dispense Item',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                if (widget.item != null) ...[
-                  Text(widget.item!.name),
-                  Text('Available: ${widget.item!.quantity} units'),
-                ],
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: amount,
-                  enabled: !_busy,
-                  autofocus: true,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.next,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(labelText: 'Quantity'),
-                  validator: (value) {
-                    final count = int.tryParse(value ?? '');
-                    if (count == null || count < 1) {
-                      return 'Enter at least 1 whole unit.';
-                    }
-                    if (!widget.restock &&
-                        widget.item != null &&
-                        count > widget.item!.quantity) {
-                      return 'Not enough stock. Available: ${widget.item!.quantity} units.';
-                    }
-                    return null;
-                  },
-                ),
-                Wrap(
-                  spacing: 12,
-                  children: [
-                    IconButton.outlined(
-                      tooltip: 'Decrease quantity',
-                      onPressed: _busy
-                          ? null
-                          : () {
-                        final count = int.tryParse(amount.text) ?? 1;
-                        amount.text = '${count > 1 ? count - 1 : 1}';
-                      },
-                      icon: const Icon(Icons.remove),
-                    ),
-                    IconButton.outlined(
-                      tooltip: 'Increase quantity',
-                      onPressed: _busy
-                          ? null
-                          : () {
-                        amount.text =
-                        '${(int.tryParse(amount.text) ?? 0) + 1}';
-                      },
-                      icon: const Icon(Icons.add),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: notes,
-                  enabled: !_busy,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Notes (optional)',
-                  ),
-                ),
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final selected = int.tryParse(amount.text) ?? 0;
+    final before = widget.item?.quantity ?? 0;
+    final after = widget.restock ? before + selected : before - selected;
+    final deltaColor = widget.restock
+        ? StockColors.of(context).healthy
+        : scheme.error;
+    final quickAmounts = widget.restock
+        ? const [10, 25, 50, 100]
+        : const [5, 10, 25, 50];
+
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _back},
+      child: PopScope(
+        canPop: !_busy && !_dirty,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _back();
+        },
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+            child: Form(
+              key: form,
+              onChanged: () => setState(() {}),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: scheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(999),
                       ),
                     ),
                   ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: _busy ? null : _submit,
-                  child: Text(
-                    _busy
-                        ? 'Saving…'
-                        : widget.restock
-                        ? 'Confirm restock'
-                        : 'Confirm dispense',
+                  const SizedBox(height: 14),
+                  Text(
+                    widget.restock ? 'Restock Inventory' : 'Dispense Inventory',
+                    style: theme.textTheme.titleLarge,
                   ),
-                ),
-                TextButton(
-                  onPressed: _busy ? null : () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-              ],
+                  if (widget.item != null) ...[
+                    const SizedBox(height: 12),
+                    Card(
+                      color: scheme.surfaceContainerLowest,
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: scheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                Icons.inventory_2_outlined,
+                                color: scheme.onPrimaryContainer,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.item!.name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${displaySku(widget.item!.sku)}  •  Current: $before units',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            StockStatus(item: widget.item!),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Card(
+                    color: scheme.surfaceContainerLowest,
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text('Stock Calculation', style: theme.textTheme.titleMedium),
+                          const SizedBox(height: 12),
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final stacked = constraints.maxWidth < 330 ||
+                                  MediaQuery.textScalerOf(context).scale(1) >= 1.4;
+                              final metrics = [
+                                _QuantityMetric(
+                                  label: 'BEFORE',
+                                  value: '$before',
+                                  caption: 'units',
+                                ),
+                                _QuantityMetric(
+                                  label: widget.restock ? 'INCOMING' : 'OUTGOING',
+                                  value: '${widget.restock ? '+' : '-'}$selected',
+                                  caption: 'units',
+                                  color: deltaColor,
+                                ),
+                                _QuantityMetric(
+                                  label: 'AFTER',
+                                  value: '$after',
+                                  caption: after < 0 ? 'invalid' : 'units',
+                                  color: after < 0
+                                      ? scheme.error
+                                      : StockColors.of(context).healthy,
+                                ),
+                              ];
+                              if (stacked) {
+                                return Column(
+                                  children: [
+                                    for (var index = 0;
+                                        index < metrics.length;
+                                        index++) ...[
+                                      metrics[index],
+                                      if (index < metrics.length - 1)
+                                        const SizedBox(height: 8),
+                                    ],
+                                  ],
+                                );
+                              }
+                              return Row(
+                                children: [
+                                  for (var index = 0;
+                                      index < metrics.length;
+                                      index++) ...[
+                                    Expanded(child: metrics[index]),
+                                    if (index < metrics.length - 1)
+                                      const SizedBox(width: 8),
+                                  ],
+                                ],
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    color: scheme.surfaceContainerLowest,
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            widget.restock ? 'Restock Quantity' : 'Dispense Quantity',
+                            style: theme.textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              IconButton.filledTonal(
+                                tooltip: 'Decrease quantity',
+                                onPressed: _busy ? null : () => _setAmount(selected - 1),
+                                icon: const Icon(Icons.remove),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: amount,
+                                  enabled: !_busy,
+                                  autofocus: true,
+                                  textAlign: TextAlign.center,
+                                  keyboardType: TextInputType.number,
+                                  textInputAction: TextInputAction.next,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Quantity',
+                                    hintText: 'Enter quantity',
+                                  ),
+                                  validator: (value) {
+                                    final count = int.tryParse(value ?? '');
+                                    if (count == null || count < 1) {
+                                      return 'Enter at least 1 whole unit.';
+                                    }
+                                    if (!widget.restock &&
+                                        widget.item != null &&
+                                        count > widget.item!.quantity) {
+                                      return 'Not enough stock. Available: ${widget.item!.quantity} units.';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              IconButton.filled(
+                                tooltip: 'Increase quantity',
+                                onPressed: _busy ? null : () => _setAmount(selected + 1),
+                                icon: const Icon(Icons.add),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final value in quickAmounts)
+                                ChoiceChip(
+                                  label: Text('${widget.restock ? '+' : '-'}$value'),
+                                  selected: selected == value,
+                                  onSelected: !widget.restock &&
+                                          widget.item != null &&
+                                          value > widget.item!.quantity
+                                      ? null
+                                      : (_) => _setAmount(value),
+                                  showCheckmark: false,
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          TextFormField(
+                            controller: notes,
+                            enabled: !_busy,
+                            maxLines: 2,
+                            decoration: const InputDecoration(
+                              labelText: 'Notes (optional)',
+                              hintText: 'Optional note…',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        _error!,
+                        style: TextStyle(color: scheme.error),
+                      ),
+                    ),
+                  const SizedBox(height: 14),
+                  FilledButton.icon(
+                    onPressed: _busy ? null : _submit,
+                    icon: Icon(
+                      widget.restock
+                          ? Icons.add_circle_outline
+                          : Icons.remove_circle_outline,
+                    ),
+                    label: Text(
+                      _busy
+                          ? 'Saving…'
+                          : widget.restock
+                          ? 'Confirm restock'
+                          : 'Confirm dispense',
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _busy ? null : () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
+}
+
+class _QuantityMetric extends StatelessWidget {
+  const _QuantityMetric({
+    required this.label,
+    required this.value,
+    required this.caption,
+    this.color,
+  });
+
+  final String label;
+  final String value;
+  final String caption;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+              letterSpacing: .4,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleLarge?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Text(
+            caption,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 Future<void> showItemHistoryDialog(

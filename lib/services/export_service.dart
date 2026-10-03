@@ -15,6 +15,36 @@ import '../models/models.dart';
 typedef SaveExport =
 Future<Uri?> Function(String name, Uint8List bytes, String extension);
 
+class InventoryImportPreview {
+  const InventoryImportPreview({
+    required this.totalRows,
+    required this.importableRows,
+    required this.duplicateNames,
+  });
+
+  final int totalRows;
+  final int importableRows;
+  final List<String> duplicateNames;
+
+  int get warningCount => duplicateNames.length;
+}
+
+class InventoryImportSelection {
+  InventoryImportSelection({
+    required this.fileName,
+    required this.extension,
+    required this.bytes,
+    required this.preview,
+    required this.rows,
+  });
+
+  final String fileName;
+  final String extension;
+  final Uint8List bytes;
+  final InventoryImportPreview preview;
+  final List<Map<String, String>> rows;
+}
+
 class _PdfTransactionRow {
   const _PdfTransactionRow({
     required this.cells,
@@ -639,7 +669,9 @@ class ExportService {
   Future<CsvImportResult?> importInventoryFile() =>
       _pickInventoryFile(const ['csv', 'xlsx']);
 
-  Future<CsvImportResult?> _pickInventoryFile(List<String> extensions) async {
+  Future<InventoryImportSelection?> pickInventoryImportFile({
+    List<String> extensions = const ['csv', 'xlsx'],
+  }) async {
     final file = await FilePicker.pickFile(
       dialogTitle: extensions.length == 1
           ? 'Import Inventory ${extensions.single.toUpperCase()}'
@@ -649,16 +681,57 @@ class ExportService {
     );
 
     if (file == null) return null;
-    return importInventoryBytes(
-      await file.readAsBytes(),
-      extension: file.name.toLowerCase().endsWith('.xlsx') ? 'xlsx' : 'csv',
+    final extension = file.name.toLowerCase().endsWith('.xlsx') ? 'xlsx' : 'csv';
+    final bytes = await file.readAsBytes();
+    final rows = _decodeInventoryRows(bytes, extension: extension);
+    _validateInventoryRows(rows);
+
+    final existingNames = (await database.getAllInventory())
+        .map((item) => item.name)
+        .toSet();
+    final duplicates = rows
+        .map((row) => (row['ItemName'] ?? '').trim())
+        .where((name) => existingNames.contains(name))
+        .toSet()
+        .toList()
+      ..sort();
+
+    return InventoryImportSelection(
+      fileName: file.name,
+      extension: extension,
+      bytes: bytes,
+      preview: InventoryImportPreview(
+        totalRows: rows.length,
+        importableRows: rows.length - duplicates.length,
+        duplicateNames: duplicates,
+      ),
+      rows: rows,
     );
   }
 
+  Future<CsvImportResult> commitInventoryImport(
+    InventoryImportSelection selection,
+  ) => database.importInventoryRows(selection.rows);
+
+  Future<CsvImportResult?> _pickInventoryFile(List<String> extensions) async {
+    final selection = await pickInventoryImportFile(extensions: extensions);
+    if (selection == null) return null;
+    return commitInventoryImport(selection);
+  }
+
   Future<CsvImportResult> importInventoryBytes(
-      Uint8List bytes, {
-        required String extension,
-      }) async {
+    Uint8List bytes, {
+    required String extension,
+  }) async {
+    final rows = _decodeInventoryRows(bytes, extension: extension);
+    _validateInventoryRows(rows);
+    return database.importInventoryRows(rows);
+  }
+
+  List<Map<String, String>> _decodeInventoryRows(
+    Uint8List bytes, {
+    required String extension,
+  }) {
     final decoded = switch (extension.toLowerCase()) {
       'csv' => Csv().decode(utf8.decode(bytes)),
       'xlsx' => _inventoryXlsxRows(bytes),
@@ -676,12 +749,11 @@ class ExportService {
     if (missing.isNotEmpty) {
       throw FormatException(
         'Missing required headers: ${missing.join(', ')}. '
-            'Required: ItemName, Category, Quantity, UnitPrice.',
+        'Required: ItemName, Category, Quantity, UnitPrice.',
       );
     }
 
     final rows = <Map<String, String>>[];
-
     for (final record in decoded.skip(1)) {
       if (record.every((cell) => cell.toString().trim().isEmpty)) continue;
 
@@ -695,15 +767,42 @@ class ExportService {
       if (row.containsKey('Quantity')) {
         row['Quantity'] = _normalizeImportedNumber(row['Quantity'] ?? '');
       }
-
       if (row.containsKey('UnitPrice')) {
         row['UnitPrice'] = _normalizeImportedNumber(row['UnitPrice'] ?? '');
       }
-
       rows.add(row);
     }
+    return rows;
+  }
 
-    return database.importInventoryRows(rows);
+  void _validateInventoryRows(List<Map<String, String>> rows) {
+    if (rows.isEmpty) {
+      throw const FormatException('Inventory file has no inventory rows.');
+    }
+    for (var index = 0; index < rows.length; index++) {
+      final row = rows[index];
+      final rowNumber = index + 2;
+      final name = (row['ItemName'] ?? '').trim();
+      final category = (row['Category'] ?? '').trim();
+      final quantity = int.tryParse((row['Quantity'] ?? '').trim());
+      final price = double.tryParse((row['UnitPrice'] ?? '').trim());
+      if (name.isEmpty) {
+        throw FormatException('Row $rowNumber: ItemName is blank.');
+      }
+      if (category.isEmpty) {
+        throw FormatException('Row $rowNumber: Category is blank.');
+      }
+      if (quantity == null || quantity < 0) {
+        throw FormatException(
+          'Row $rowNumber: Quantity must be a non-negative integer.',
+        );
+      }
+      if (price == null || !price.isFinite || price < 0) {
+        throw FormatException(
+          'Row $rowNumber: UnitPrice must be a non-negative number.',
+        );
+      }
+    }
   }
 
   List<List<dynamic>> _inventoryXlsxRows(Uint8List bytes) {

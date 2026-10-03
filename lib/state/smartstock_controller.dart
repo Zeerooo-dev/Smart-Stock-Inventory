@@ -12,7 +12,7 @@ import '../services/notification_service.dart';
 import '../services/database_crypto.dart';
 import '../services/scheduled_report_writer.dart';
 
-enum AppSection { inventory, reports, audit, suppliers, settings }
+enum AppSection { dashboard, inventory, reports, audit, suppliers, settings, more }
 
 enum ScheduledFormat { xlsxOnly, pdfOnly, xlsxAndPdf }
 
@@ -49,7 +49,7 @@ class SmartStockController extends ChangeNotifier {
   String? startupError;
   bool needsLegacyPassphrase = false;
   String statusMessage = 'Ready';
-  AppSection section = AppSection.inventory;
+  AppSection section = AppSection.dashboard;
   SmartStockTheme theme = SmartStockTheme.defaultLight;
   Color? customAccent;
 
@@ -137,6 +137,7 @@ class SmartStockController extends ChangeNotifier {
 
   void goTo(AppSection next) {
     section = next;
+    if (next == AppSection.dashboard) unawaited(refreshAll());
     if (next == AppSection.reports) unawaited(refreshReports());
     if (next == AppSection.audit) unawaited(refreshAudit());
     if (next == AppSection.suppliers) unawaited(refreshSuppliers());

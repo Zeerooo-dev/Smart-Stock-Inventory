@@ -2,15 +2,91 @@ import 'dart:async';
 
 import '../models/models.dart';
 
+class SmartStockNotification {
+  SmartStockNotification({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.createdAt,
+    this.isRead = false,
+  });
+
+  final int id;
+  final String title;
+  final String message;
+  final DateTime createdAt;
+  bool isRead;
+}
+
 /// One best-effort notification boundary. UI delivery must never undo a write.
+///
+/// The in-memory history is intentionally session-scoped: it mirrors the
+/// existing notification behavior without adding a new persistence contract.
 class NotificationService {
   void Function(String title, String message)? onNotification;
 
+  final List<SmartStockNotification> _history = [];
+  final Set<void Function()> _listeners = {};
+  int _nextId = 1;
+
+  List<SmartStockNotification> get history => List.unmodifiable(_history);
+  int get unreadCount => _history.where((entry) => !entry.isRead).length;
+
+  void addListener(void Function() listener) => _listeners.add(listener);
+  void removeListener(void Function() listener) => _listeners.remove(listener);
+
   void show(String title, String message) {
+    _history.insert(
+      0,
+      SmartStockNotification(
+        id: _nextId++,
+        title: title,
+        message: message,
+        createdAt: DateTime.now(),
+      ),
+    );
+    if (_history.length > 100) {
+      _history.removeRange(100, _history.length);
+    }
+    _notifyListeners();
+
     try {
       onNotification?.call(title, message);
     } catch (_) {
       // Notifications are optional; database/export success is independent.
+    }
+  }
+
+  void markRead(int id) {
+    final entry = _history.where((item) => item.id == id).firstOrNull;
+    if (entry == null || entry.isRead) return;
+    entry.isRead = true;
+    _notifyListeners();
+  }
+
+  void markAllRead() {
+    var changed = false;
+    for (final entry in _history) {
+      if (entry.isRead) continue;
+      entry.isRead = true;
+      changed = true;
+    }
+    if (changed) _notifyListeners();
+  }
+
+  void clear() {
+    if (_history.isEmpty) return;
+    _history.clear();
+    _notifyListeners();
+  }
+
+  void _notifyListeners() {
+    for (final listener in List<void Function()>.of(_listeners)) {
+      try {
+        listener();
+      } catch (_) {
+        // A notification-center listener must not affect inventory writes.
+      }
     }
   }
 }
@@ -60,5 +136,13 @@ class LowStockMonitor {
   void dispose() {
     _disposed = true;
     _timer?.cancel();
+  }
+}
+
+extension _FirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull {
+    final iterator = this.iterator;
+    if (!iterator.moveNext()) return null;
+    return iterator.current;
   }
 }

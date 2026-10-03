@@ -553,6 +553,7 @@ class DatabaseService {
   Future<List<LowStockThreat>> getLowStockThreats() async {
     final rows = await db.rawQuery('''
       SELECT ItemName, Quantity, ReorderLevel FROM Item
+      WHERE Quantity < ReorderLevel
       ORDER BY CAST(Quantity AS REAL) / MAX(ReorderLevel, 1) ASC LIMIT 5
     ''');
     return rows

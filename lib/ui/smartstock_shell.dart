@@ -1,16 +1,24 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../state/smartstock_controller.dart';
 import 'pages/audit_page.dart';
+import 'pages/dashboard_page.dart';
+import 'pages/import_export_pages.dart';
 import 'pages/inventory_page.dart';
+import 'pages/more_page.dart';
+import 'pages/notifications_page.dart';
 import 'pages/reports_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/suppliers_page.dart';
 
 class SmartStockShell extends StatefulWidget {
   const SmartStockShell({super.key, required this.controller});
+
   final SmartStockController controller;
+
   @override
   State<SmartStockShell> createState() => _SmartStockShellState();
 }
@@ -23,17 +31,33 @@ class _SmartStockShellState extends State<SmartStockShell>
   String? _error;
   int _navigation = 0;
   final _visited = <AppSection>{};
+
   SmartStockController get controller => widget.controller;
+
+  static const _mobileSections = <AppSection>[
+    AppSection.dashboard,
+    AppSection.inventory,
+    AppSection.reports,
+    AppSection.audit,
+    AppSection.more,
+  ];
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    controller.notifications.addListener(_notificationChanged);
   }
 
   @override
   void dispose() {
+    controller.notifications.removeListener(_notificationChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _notificationChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -60,6 +84,8 @@ class _SmartStockShellState extends State<SmartStockShell>
     });
     try {
       switch (section) {
+        case AppSection.dashboard:
+          await controller.refreshAll();
         case AppSection.inventory:
           await controller.refreshInventory();
         case AppSection.reports:
@@ -70,12 +96,14 @@ class _SmartStockShellState extends State<SmartStockShell>
           await controller.refreshSuppliers();
         case AppSection.settings:
           await controller.refreshCategories();
+        case AppSection.more:
+          break;
       }
     } catch (e) {
       if (mounted && request == _navigation) {
         setState(
-          () =>
-              _error = 'Could not refresh ${_label(section).toLowerCase()}: $e',
+          () => _error =
+              'Could not refresh ${_label(section).toLowerCase()}: $e',
         );
       }
     } finally {
@@ -83,38 +111,84 @@ class _SmartStockShellState extends State<SmartStockShell>
     }
   }
 
-  Future<void> _more() async {
-    final section = await showModalBottomSheet<AppSection>(
-      context: context,
-      useSafeArea: true,
-      builder: (context) => SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final section in [AppSection.suppliers, AppSection.settings])
-              ListTile(
-                leading: Icon(_icon(section)),
-                title: Text(_label(section)),
-                onTap: () => Navigator.pop(context, section),
-              ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => NotificationsPage(controller: controller),
       ),
     );
-    if (section != null && mounted) await _navigate(section);
+  }
+
+  Future<void> _openImport() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ImportInventoryPage(controller: controller),
+      ),
+    );
+  }
+
+  Future<void> _openExport() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ExportInventoryPage(controller: controller),
+      ),
+    );
+  }
+
+  Future<void> _showHelp() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Help & Inventory Guide'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'Use Dashboard for a quick inventory overview.\n\n'
+            'Open Inventory to search items, view details, restock, dispense, add items, or scan a barcode.\n\n'
+            'Reports summarizes current stock and export tools. Audit Log keeps the recorded inventory history.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAbout() {
+    showAboutDialog(
+      context: context,
+      applicationName: 'SmartStock',
+      applicationVersion: '2.1.0',
+      applicationLegalese: 'Precision stock management system',
+    );
+  }
+
+  Future<void> _inventoryAction(String message) async {
+    controller.setStatus(message);
+    await _navigate(AppSection.inventory);
+  }
+
+  Future<void> _openLowStock(String itemName) async {
+    await _navigate(AppSection.inventory);
+    await controller.setInventorySearch(itemName);
   }
 
   @override
   Widget build(BuildContext context) {
     _visited.add(controller.section);
     return PopScope(
-      canPop: controller.section == AppSection.inventory,
+      canPop: controller.section == AppSection.dashboard,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _navigate(AppSection.inventory);
+        if (didPop) return;
+        if (controller.section == AppSection.settings ||
+            controller.section == AppSection.suppliers) {
+          _navigate(AppSection.more);
+        } else {
+          _navigate(AppSection.dashboard);
+        }
       },
       child: Focus(
         autofocus: true,
@@ -122,7 +196,7 @@ class _SmartStockShellState extends State<SmartStockShell>
         child: LayoutBuilder(
           builder: (context, box) {
             final rail =
-                box.maxWidth >= 760 &&
+                box.maxWidth >= 600 &&
                 box.maxHeight >= 500 &&
                 MediaQuery.textScalerOf(context).scale(1) < 1.6;
             final short = box.maxHeight < 450;
@@ -159,6 +233,27 @@ class _SmartStockShellState extends State<SmartStockShell>
                             ? KeyedSubtree(
                                 key: ValueKey(section),
                                 child: switch (section) {
+                                  AppSection.dashboard => DashboardPage(
+                                    controller: controller,
+                                    onInventory: () =>
+                                        _navigate(AppSection.inventory),
+                                    onReports: () =>
+                                        _navigate(AppSection.reports),
+                                    onAudit: () => _navigate(AppSection.audit),
+                                    onScan: () =>
+                                        showScanner(context, controller),
+                                    onRestock: () => _inventoryAction(
+                                      'Select an item to restock.',
+                                    ),
+                                    onDispense: () => _inventoryAction(
+                                      'Select an item to dispense.',
+                                    ),
+                                    onAddItem: () => _inventoryAction(
+                                      'Use Add Item to create new inventory.',
+                                    ),
+                                    onOpenLowStock: (name) =>
+                                        unawaited(_openLowStock(name)),
+                                  ),
                                   AppSection.inventory => InventoryPageView(
                                     controller: controller,
                                   ),
@@ -173,6 +268,21 @@ class _SmartStockShellState extends State<SmartStockShell>
                                   ),
                                   AppSection.settings => SettingsPage(
                                     controller: controller,
+                                  ),
+                                  AppSection.more => MorePage(
+                                    controller: controller,
+                                    onNotifications: () =>
+                                        unawaited(_openNotifications()),
+                                    onSuppliers: () =>
+                                        unawaited(_navigate(AppSection.suppliers)),
+                                    onSettings: () =>
+                                        unawaited(_navigate(AppSection.settings)),
+                                    onImport: () => unawaited(_openImport()),
+                                    onExport: () => unawaited(_openExport()),
+                                    onScanner: () =>
+                                        showScanner(context, controller),
+                                    onHelp: () => unawaited(_showHelp()),
+                                    onAbout: _showAbout,
                                   ),
                                 },
                               )
@@ -208,12 +318,21 @@ class _SmartStockShellState extends State<SmartStockShell>
                               ),
                             )
                           : null,
-                      title: Text(_label(controller.section)),
+                      title: controller.section == AppSection.dashboard
+                          ? const _DashboardTitle()
+                          : Text(_label(controller.section)),
                       actions: [
+                        IconButton(
+                          tooltip: 'Notifications',
+                          onPressed: _openNotifications,
+                          icon: _NotificationIcon(
+                            count: controller.notifications.unreadCount,
+                          ),
+                        ),
                         IconButton(
                           tooltip: 'Scan barcode',
                           onPressed: () => showScanner(context, controller),
-                          icon: const Icon(Icons.barcode_reader),
+                          icon: const Icon(Icons.qr_code_scanner),
                         ),
                       ],
                     ),
@@ -222,9 +341,12 @@ class _SmartStockShellState extends State<SmartStockShell>
                       child: SafeArea(
                         child: ListView(
                           children: [
-                            const Padding(
-                              padding: EdgeInsets.all(20),
-                              child: Text('SmartStock'),
+                            Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Text(
+                                'SmartStock',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
                             ),
                             ...destinations,
                           ],
@@ -239,29 +361,50 @@ class _SmartStockShellState extends State<SmartStockShell>
                     ? Row(
                         children: [
                           SizedBox(
-                            width: box.maxWidth >= 1200 ? 210 : 180,
+                            width: box.maxWidth >= 1200 ? 210 : 176,
                             child: ListView(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
                               children: [
                                 Padding(
-                                  padding: const EdgeInsets.all(20),
+                                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
                                   child: Text(
                                     'SmartStock',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleLarge,
+                                    style: Theme.of(context).textTheme.titleLarge,
                                   ),
                                 ),
                                 ...destinations,
-                                TextButton.icon(
-                                  onPressed: () =>
-                                      showScanner(context, controller),
-                                  icon: const Icon(Icons.barcode_reader),
-                                  label: const Text('Scan barcode'),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 4,
+                                  ),
+                                  child: OutlinedButton.icon(
+                                    onPressed: _openNotifications,
+                                    icon: _NotificationIcon(
+                                      count: controller.notifications.unreadCount,
+                                    ),
+                                    label: const Text('Notifications'),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 4,
+                                  ),
+                                  child: OutlinedButton.icon(
+                                    onPressed: () =>
+                                        showScanner(context, controller),
+                                    icon: const Icon(Icons.qr_code_scanner),
+                                    label: const Text('Scan barcode'),
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                          const VerticalDivider(width: 1),
+                          VerticalDivider(
+                            width: 1,
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
                           Expanded(child: page),
                         ],
                       )
@@ -269,96 +412,48 @@ class _SmartStockShellState extends State<SmartStockShell>
               ),
               bottomNavigationBar: rail || short
                   ? null
-                  : SafeArea(
-                      top: false,
-                      child: Material(
-                        color: Theme.of(context).colorScheme.surface,
-                        child: Wrap(
-                          children: [
-                            for (var index = 0; index < 4; index++)
-                              SizedBox(
-                                width:
-                                    box.maxWidth /
-                                    (MediaQuery.textScalerOf(
-                                              context,
-                                            ).scale(1) >=
-                                            1.5
-                                        ? 2
-                                        : 4),
-                                child: Semantics(
-                                  selected:
-                                      index ==
-                                      (controller.section.index < 3
-                                          ? controller.section.index
-                                          : 3),
-                                  child: TextButton(
-                                    onPressed: () => index == 3
-                                        ? _more()
-                                        : _navigate(AppSection.values[index]),
-                                    style: TextButton.styleFrom(
-                                      textStyle: Theme.of(
-                                        context,
-                                      ).textTheme.labelMedium,
-                                      foregroundColor:
-                                          index ==
-                                              (controller.section.index < 3
-                                                  ? controller.section.index
-                                                  : 3)
-                                          ? Theme.of(
-                                              context,
-                                            ).colorScheme.onPrimaryContainer
-                                          : Theme.of(
-                                              context,
-                                            ).colorScheme.onSurfaceVariant,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 2,
-                                        vertical: 10,
-                                      ),
-                                      backgroundColor:
-                                          index ==
-                                              (controller.section.index < 3
-                                                  ? controller.section.index
-                                                  : 3)
-                                          ? Theme.of(
-                                              context,
-                                            ).colorScheme.primaryContainer
-                                          : null,
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          index == 3
-                                              ? Icons.more_horiz
-                                              : _icon(AppSection.values[index]),
-                                        ),
-                                        Text(
-                                          index == 3
-                                              ? 'More'
-                                              : index == 2
-                                              ? 'Audit'
-                                              : _label(
-                                                  AppSection.values[index],
-                                                ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
+                  : NavigationBar(
+                      selectedIndex: _mobileSelectedIndex,
+                      onDestinationSelected: (index) {
+                        _navigate(_mobileSections[index]);
+                      },
+                      destinations: const [
+                        NavigationDestination(
+                          icon: Icon(Icons.dashboard_outlined),
+                          selectedIcon: Icon(Icons.dashboard),
+                          label: 'Dashboard',
                         ),
-                      ),
+                        NavigationDestination(
+                          icon: Icon(Icons.inventory_2_outlined),
+                          selectedIcon: Icon(Icons.inventory_2),
+                          label: 'Inventory',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.analytics_outlined),
+                          selectedIcon: Icon(Icons.analytics),
+                          label: 'Reports',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.receipt_long_outlined),
+                          selectedIcon: Icon(Icons.receipt_long),
+                          label: 'Audit',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.more_horiz),
+                          label: 'More',
+                        ),
+                      ],
                     ),
             );
           },
         ),
       ),
     );
+  }
+
+  int get _mobileSelectedIndex {
+    final index = _mobileSections.indexOf(controller.section);
+    return index >= 0 ? index : 4;
   }
 
   KeyEventResult _onScannerKeyEvent(FocusNode node, KeyEvent event) {
@@ -405,17 +500,94 @@ class _SmartStockShellState extends State<SmartStockShell>
   }
 }
 
+class _NotificationIcon extends StatelessWidget {
+  const _NotificationIcon({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      const Icon(Icons.notifications_none_rounded),
+      if (count > 0)
+        Positioned(
+          right: -2,
+          top: -1,
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.error,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Theme.of(context).colorScheme.surface,
+                width: 1.5,
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
+class _DashboardTitle extends StatelessWidget {
+  const _DashboardTitle();
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Icon(
+          Icons.inventory_2_outlined,
+          size: 18,
+          color: Theme.of(context).colorScheme.onPrimary,
+        ),
+      ),
+      const SizedBox(width: 10),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'SmartStock',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          Text(
+            'Inventory overview',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
 String _label(AppSection section) => switch (section) {
+  AppSection.dashboard => 'Dashboard',
   AppSection.inventory => 'Inventory',
   AppSection.reports => 'Reports',
   AppSection.audit => 'Audit Log',
   AppSection.suppliers => 'Suppliers',
   AppSection.settings => 'Settings',
+  AppSection.more => 'More',
 };
+
 IconData _icon(AppSection section) => switch (section) {
+  AppSection.dashboard => Icons.dashboard_outlined,
   AppSection.inventory => Icons.inventory_2_outlined,
   AppSection.reports => Icons.analytics_outlined,
   AppSection.audit => Icons.receipt_long_outlined,
   AppSection.suppliers => Icons.local_shipping_outlined,
   AppSection.settings => Icons.settings_outlined,
+  AppSection.more => Icons.more_horiz,
 };
